@@ -45,17 +45,17 @@ TIM_HandleTypeDef htim1;
 
 UART_HandleTypeDef huart2;
 
-/* Definitions for defaultTask */
-osThreadId_t defaultTaskHandle;
-const osThreadAttr_t defaultTask_attributes = {
-  .name = "defaultTask",
+/* Definitions for heartbeatTsk */
+osThreadId_t heartbeatTskHandle;
+const osThreadAttr_t heartbeatTsk_attributes = {
+  .name = "heartbeatTsk",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for serialPrintTask */
-osThreadId_t serialPrintTaskHandle;
-const osThreadAttr_t serialPrintTask_attributes = {
-  .name = "serialPrintTask",
+/* Definitions for grabberMotorTsk */
+osThreadId_t grabberMotorTskHandle;
+const osThreadAttr_t grabberMotorTsk_attributes = {
+  .name = "grabberMotorTsk",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
@@ -68,8 +68,8 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART2_UART_Init(void);
-void StartDefaultTask(void *argument);
-void serialPrintTaskFunc(void *argument);
+void hearbeatTaskFunc(void *argument);
+void grabberMotorTaskFunc(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -114,7 +114,7 @@ int main(void)
 
   // Start timer
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-  htim1.Instance->CCR1 = 50;
+  htim1.Instance->CCR1 = 50; // initialize pulse width to 1ms = 0 degree positon
 
   /* USER CODE END 2 */
 
@@ -138,11 +138,11 @@ int main(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of defaultTask */
-  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+  /* creation of heartbeatTsk */
+  heartbeatTskHandle = osThreadNew(hearbeatTaskFunc, NULL, &heartbeatTsk_attributes);
 
-  /* creation of serialPrintTask */
-  serialPrintTaskHandle = osThreadNew(serialPrintTaskFunc, NULL, &serialPrintTask_attributes);
+  /* creation of grabberMotorTsk */
+  grabberMotorTskHandle = osThreadNew(grabberMotorTaskFunc, NULL, &grabberMotorTsk_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -232,9 +232,9 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 210;
+  htim1.Init.Prescaler = 210-1;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 999;
+  htim1.Init.Period = 1000-1;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -351,53 +351,50 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartDefaultTask */
+/* USER CODE BEGIN Header_hearbeatTaskFunc */
 /**
-  * @brief  Function implementing the defaultTask thread.
+  * @brief  Function implementing the heartbeatTsk thread. Sends out Hello World message over UART as a heartbeat at a rate of 1Hz
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
+/* USER CODE END Header_hearbeatTaskFunc */
+void hearbeatTaskFunc(void *argument)
 {
   /* USER CODE BEGIN 5 */
-  uint8_t Test[] = "Hello World !!!\r\n"; //Data to send
+  uint8_t heartbeat_message[] = "Hello World !!!\r\n"; // message to send
   /* Infinite loop */
   for(;;)
   {
-	  HAL_UART_Transmit(&huart2,Test,sizeof(Test),10);// Sending in normal mode
+	  HAL_UART_Transmit(&huart2,heartbeat_message,sizeof(heartbeat_message),10);// Sending in normal mode
 	  HAL_Delay(1000);
 	  osDelay(1);
   }
   /* USER CODE END 5 */
 }
 
-/* USER CODE BEGIN Header_serialPrintTaskFunc */
+/* USER CODE BEGIN Header_grabberMotorTaskFunc */
 /**
-* @brief Function implementing the serialPrintTask thread.
+* @brief Function implementing the grabberMotorTsk thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_serialPrintTaskFunc */
-void serialPrintTaskFunc(void *argument)
+/* USER CODE END Header_grabberMotorTaskFunc */
+void grabberMotorTaskFunc(void *argument)
 {
-  /* USER CODE BEGIN serialPrintTaskFunc */
-  /* Infinite loop */
-// 50 -> 100
-  int i = 100;
+  /* USER CODE BEGIN grabberMotorTaskFunc */
+  /* This task moves the grabber servo motor from 0degrees to 180degrees then resets to 0degrees and repeats*/
+  // 50 -> 100 : 0deg to 180deg linearly
+  int i = 50;
   for(;;)
   {
-	if(i==25) break;
+	if (i==100) {
+		i=50;
+	}
 	htim1.Instance->CCR1 = i;
-	i-=25;
-    osDelay(10);
+	i+=10;
+	osDelay(10);
   }
-
-  for(;;)
-  {
-	  htim1.Instance->CCR1 = 500;
-  }
-  /* USER CODE END serialPrintTaskFunc */
+  /* USER CODE END grabberMotorTaskFunc */
 }
 
 /**

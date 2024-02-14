@@ -79,8 +79,8 @@ all: main-build
 main-build: LineOS.elf secondary-outputs
 
 # Tool invocations
-LineOS.elf LineOS.map: $(OBJS) $(USER_OBJS) C:\Users\kiran\STM32CubeIDE\workspace_1.12.1\LineOS\STM32F401RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-g++ -o "LineOS.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\kiran\STM32CubeIDE\workspace_1.12.1\LineOS\STM32F401RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="LineOS.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -lstdc++ -lsupc++ -Wl,--end-group
+LineOS.elf LineOS.map: $(OBJS) $(USER_OBJS) C:\Users\kiran\Desktop\MTE\ 380\LineOS\STM32F401RETX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-g++ -o "LineOS.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\kiran\Desktop\MTE 380\LineOS\STM32F401RETX_FLASH.ld" --specs=nosys.specs -Wl,-Map="LineOS.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -lstdc++ -lsupc++ -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

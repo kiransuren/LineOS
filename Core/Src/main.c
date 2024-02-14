@@ -52,6 +52,13 @@ const osThreadAttr_t defaultTask_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
+/* Definitions for serialPrintTask */
+osThreadId_t serialPrintTaskHandle;
+const osThreadAttr_t serialPrintTask_attributes = {
+  .name = "serialPrintTask",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -62,6 +69,7 @@ static void MX_GPIO_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART2_UART_Init(void);
 void StartDefaultTask(void *argument);
+void serialPrintTaskFunc(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -106,7 +114,7 @@ int main(void)
 
   // Start timer
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-  htim1.Instance->CCR1 = 100;
+  htim1.Instance->CCR1 = 50;
 
   /* USER CODE END 2 */
 
@@ -132,6 +140,9 @@ int main(void)
   /* Create the thread(s) */
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+
+  /* creation of serialPrintTask */
+  serialPrintTaskHandle = osThreadNew(serialPrintTaskFunc, NULL, &serialPrintTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -193,7 +204,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV16;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
@@ -221,9 +232,9 @@ static void MX_TIM1_Init(void)
 
   /* USER CODE END TIM1_Init 1 */
   htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 8400;
+  htim1.Init.Prescaler = 210;
   htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 1000;
+  htim1.Init.Period = 999;
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim1.Init.RepetitionCounter = 0;
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -350,17 +361,48 @@ static void MX_GPIO_Init(void)
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
+  uint8_t Test[] = "Hello World !!!\r\n"; //Data to send
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+	  HAL_UART_Transmit(&huart2,Test,sizeof(Test),10);// Sending in normal mode
+	  HAL_Delay(1000);
+	  osDelay(1);
   }
   /* USER CODE END 5 */
 }
 
+/* USER CODE BEGIN Header_serialPrintTaskFunc */
+/**
+* @brief Function implementing the serialPrintTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_serialPrintTaskFunc */
+void serialPrintTaskFunc(void *argument)
+{
+  /* USER CODE BEGIN serialPrintTaskFunc */
+  /* Infinite loop */
+// 50 -> 100
+  int i = 100;
+  for(;;)
+  {
+	if(i==25) break;
+	htim1.Instance->CCR1 = i;
+	i-=25;
+    osDelay(10);
+  }
+
+  for(;;)
+  {
+	  htim1.Instance->CCR1 = 500;
+  }
+  /* USER CODE END serialPrintTaskFunc */
+}
+
 /**
   * @brief  Period elapsed callback in non blocking mode
-  * @note   This function is called  when TIM11 interrupt took place, inside
+  * @note   This function is called  when TIM2 interrupt took place, inside
   * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
   * a global variable "uwTick" used as application time base.
   * @param  htim : TIM handle
@@ -371,7 +413,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 0 */
 
   /* USER CODE END Callback 0 */
-  if (htim->Instance == TIM11) {
+  if (htim->Instance == TIM2) {
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */

@@ -22,7 +22,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -32,7 +32,37 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+// Only one address is possible for the APDS9960, no alternates are available
+static const uint16_t _APDS9960_I2C_ADDRESS = 0x39<<1; //use 8-bit address
+//#define _DEVICE_IDS = (const(0xAB), const(0xA8))
+#define _APDS9960_ENABLE 0x80
+#define _APDS9960_ATIME 0x81
+#define _APDS9960_PILT 0x89
+#define _APDS9960_PIHT 0x8B
+#define _APDS9960_PERS 0x8C
+#define _APDS9960_CONTROL 0x8F
+#define _APDS9960_ID 0x92
+#define _APDS9960_STATUS 0x93
+#define _APDS9960_CDATAL 0x94
+#define _APDS9960_RDATAL 0x96
+#define _APDS9960_GDATAL 0x98
+#define _APDS9960_BDATAL 0x9A
+#define _APDS9960_PDATA 0x9C
+#define _APDS9960_GPENTH 0xA0
+#define _APDS9960_GEXTH 0xA1
+#define _APDS9960_GCONF1 0xA2
+#define _APDS9960_GCONF2 0xA3
+#define _APDS9960_GPULSE 0xA6
+#define _APDS9960_GCONF4 0xAB
+#define _APDS9960_GFLVL 0xAE
+#define _APDS9960_GSTATUS 0xAF
+#define _APDS9960_AICLEAR 0xE7
+#define _APDS9960_GFIFO_U 0xFC
 
+#define _BIT_MASK_GCONF4_GFIFO_CLR 0x04
+#define _BIT_MASK_ENABLE_EN 0x01
+#define _BIT_MASK_ENABLE_COLOR 0x02
+#define _BIT_MASK_STATUS_AVALID 0x01
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -41,6 +71,8 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+I2C_HandleTypeDef hi2c1;
+
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
 
@@ -60,6 +92,13 @@ const osThreadAttr_t grabberMotorTsk_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
+/* Definitions for colourSenseRead */
+osThreadId_t colourSenseReadHandle;
+const osThreadAttr_t colourSenseRead_attributes = {
+  .name = "colourSenseRead",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -70,16 +109,28 @@ static void MX_GPIO_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM3_Init(void);
+static void MX_I2C1_Init(void);
 void hearbeatTaskFunc(void *argument);
 void grabberMotorTaskFunc(void *argument);
+void colourSensorReadFunc(void *argument);
 
 /* USER CODE BEGIN PFP */
+#ifdef __GNUC__
+#define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
+#else
+#define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
+#endif
+
+PUTCHAR_PROTOTYPE
+{
+  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+  return ch;
+}
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
 /* USER CODE END 0 */
 
 /**
@@ -99,6 +150,7 @@ int main(void)
 
   /* USER CODE BEGIN Init */
 
+
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -113,6 +165,7 @@ int main(void)
   MX_TIM1_Init();
   MX_USART2_UART_Init();
   MX_TIM3_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 
   // Start timer for grabber servo
@@ -152,6 +205,9 @@ int main(void)
 
   /* creation of grabberMotorTsk */
   grabberMotorTskHandle = osThreadNew(grabberMotorTaskFunc, NULL, &grabberMotorTsk_attributes);
+
+  /* creation of colourSenseRead */
+  colourSenseReadHandle = osThreadNew(colourSensorReadFunc, NULL, &colourSenseRead_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -219,6 +275,40 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.ClockSpeed = 100000;
+  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
+
 }
 
 /**
@@ -536,6 +626,156 @@ void grabberMotorTaskFunc(void *argument)
 	osDelay(10);
   }
   /* USER CODE END grabberMotorTaskFunc */
+}
+
+/* USER CODE BEGIN Header_colourSensorReadFunc */
+/**
+* @brief Function implementing the colourSenseRead thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_colourSensorReadFunc */
+void colourSensorReadFunc(void *argument)
+{
+  /* USER CODE BEGIN colourSensorReadFunc */
+ printf("Beginning sensor read\n");
+ int ret = 0;
+ uint8_t buf[8];
+ //Reset basic config registers to power-on defaults
+ buf[0] = _APDS9960_GPENTH;
+ buf[1] = 0;
+ ret = HAL_I2C_Master_Transmit(&hi2c1, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+ buf[0] = _APDS9960_GEXTH;
+ buf[1] = 0;
+ ret = HAL_I2C_Master_Transmit(&hi2c1, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+ buf[0] = _APDS9960_GCONF1;
+ buf[1] = 0;
+ ret = HAL_I2C_Master_Transmit(&hi2c1, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+ buf[0] = _APDS9960_GCONF2;
+ buf[1] = 0;
+ ret = HAL_I2C_Master_Transmit(&hi2c1, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+ buf[0] = _APDS9960_GCONF4;
+ buf[1] = 0;
+ ret = HAL_I2C_Master_Transmit(&hi2c1, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+ buf[0] = _APDS9960_GPULSE;
+ buf[1] = 0;
+ ret = HAL_I2C_Master_Transmit(&hi2c1, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+ buf[0] = _APDS9960_ATIME;
+ buf[1] = 175;
+ ret = HAL_I2C_Master_Transmit(&hi2c1, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+ buf[0] = _APDS9960_CONTROL;
+ buf[1] = 3;
+ ret = HAL_I2C_Master_Transmit(&hi2c1, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+ buf[0] = _APDS9960_CONTROL;
+ buf[1] = 3;
+ ret = HAL_I2C_Master_Transmit(&hi2c1, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+
+  //Clear all non-gesture interrupts
+ buf[0] = _APDS9960_AICLEAR;
+ ret = HAL_I2C_Master_Transmit(&hi2c1, _APDS9960_I2C_ADDRESS, buf, 1, HAL_MAX_DELAY);
+
+ //Clear gesture FIFOs and interrupt
+ ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_GCONF4, 1, buf, 1, HAL_MAX_DELAY);
+ buf[1] = buf[0];	// move current GCONF4 value into buf[1]
+ buf[1] |= _BIT_MASK_GCONF4_GFIFO_CLR;
+ buf[0] = _APDS9960_GCONF4;
+ ret = HAL_I2C_Master_Transmit(&hi2c1, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+
+ //Disable sensor and all functions/interrupts
+ buf[0] = _APDS9960_ENABLE;
+ buf[1] = 0;
+ ret = HAL_I2C_Master_Transmit(&hi2c1, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+ osDelay(1); //Sleeping could take at ~2-25 ms if engines were looping
+
+ //Re-enable sensor and wait 10ms for the power on delay to finish
+ buf[0] = 0;
+ buf[1] = 0;
+ ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_ENABLE, 1, buf, 1, HAL_MAX_DELAY);
+ buf[1] = buf[0];	// move current _APDS9960_ENABLE value into buf[1]
+ buf[1] |= _BIT_MASK_ENABLE_EN;
+ buf[1] |= _BIT_MASK_ENABLE_COLOR;
+ buf[0] = _APDS9960_ENABLE;
+ ret = HAL_I2C_Master_Transmit(&hi2c1, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+ osDelay(1);
+ buf[0] = 100;
+ ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_ENABLE, 1, buf, 1, HAL_MAX_DELAY);
+ printf("Sensor Enable Register State: %x\n", buf[0]);
+
+ /* TODO: setting defaults */
+ //Trigger proximity interrupt at >= 5, PPERS: 4 cycles
+ //self.proximity_interrupt_threshold = (0, 5, 4)
+ //Enter gesture engine at >= 5 proximity counts
+ //self._write8(_APDS9960_GPENTH, 0x05)
+ //Exit gesture engine if all counts drop below 30
+ //self._write8(_APDS9960_GEXTH, 0x1E)
+ //GEXPERS: 2 (4 cycles), GEXMSK: 0 (default) GFIFOTH: 2 (8 datasets)
+ //self._write8(_APDS9960_GCONF1, 0x82)
+ //GGAIN: 2 (4x), GLDRIVE: 100 mA (default), GWTIME: 1 (2.8ms)
+ //self._write8(_APDS9960_GCONF2, 0x41)
+ //GPULSE: 5 (6 pulses), GPLEN: 2 (16 us)
+ //self._write8(_APDS9960_GPULSE, 0x85)
+ //ATIME: 256 (712ms color integration time, max count of 65535)
+ //self.color_integration_time = 256
+ //AGAIN: 1 (4x color gain)
+ //self.color_gain = 1
+
+ // Enable color
+ //self._set_bit(_APDS9960_ENABLE, _BIT_MASK_ENABLE_COLOR, value)
+
+ // Check if color data ready
+ ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_STATUS, 1, buf, 1, HAL_MAX_DELAY);
+ uint8_t c_data_ready = buf[0] & _BIT_MASK_STATUS_AVALID;
+
+ ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_CDATAL, 1, buf, 2, HAL_MAX_DELAY);
+ uint16_t final_value =buf[1] << 8 | buf[0];
+ int percent_value = 0;
+ uint16_t clear_data = 0;
+ uint16_t red_data = 0;
+ uint16_t green_data = 0;
+ uint16_t blue_data = 0;
+
+
+
+  /* Infinite loop */
+  for(;;)
+  {
+	ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_STATUS, 1, buf, 1, HAL_MAX_DELAY);
+	if(ret==HAL_ERROR)
+	{
+		printf("TRANSMIT ERROR\n");
+	}
+	c_data_ready = buf[0] & _BIT_MASK_STATUS_AVALID;
+
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_CDATAL, 1, buf, 2, HAL_MAX_DELAY);
+	clear_data = buf[1] << 8 | buf[0];
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_RDATAL, 1, buf, 2, HAL_MAX_DELAY);
+	red_data = buf[1] << 8 | buf[0];
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_GDATAL, 1, buf, 2, HAL_MAX_DELAY);
+	green_data = buf[1] << 8 | buf[0];
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_BDATAL, 1, buf, 2, HAL_MAX_DELAY);
+	blue_data = buf[1] << 8 | buf[0];
+
+
+
+	printf("RGBC: %d %d %d %d\n", red_data, green_data, blue_data, clear_data);
+
+	/*if(c_data_ready)
+	{
+		printf("COLOR DATA NOT READY %x: %x & %x\n", final_value, buf[0], buf[1]);
+	} else {
+		printf("COLOR DATA READY  %x: %x & %x\n", final_value, buf[0], buf[1]);
+	}*/
+    osDelay(1000);
+  }
+  /* USER CODE END colourSensorReadFunc */
 }
 
 /**

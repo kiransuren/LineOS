@@ -122,7 +122,7 @@ static void MX_I2C3_Init(void);
 static void MX_TIM1_Init(void);
 void hearbeatTaskFunc(void *argument);
 void grabberMotorTaskFunc(void *argument);
-void colourSensorReadFunc(void *argument);
+void colourSensorReadTsk(void *argument);
 void wheelMotorTask(void *argument);
 
 /* USER CODE BEGIN PFP */
@@ -142,6 +142,14 @@ PUTCHAR_PROTOTYPE
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+float red_ratio_R = 0;
+float green_ratio_R = 0;
+float blue_ratio_R = 0;
+
+float red_ratio_L = 0;
+float green_ratio_L = 0;
+float blue_ratio_L = 0;
+
 /* USER CODE END 0 */
 
 /**
@@ -219,7 +227,7 @@ int main(void)
   grabberMotorTskHandle = osThreadNew(grabberMotorTaskFunc, NULL, &grabberMotorTsk_attributes);
 
   /* creation of colourSenseRead */
-  colourSenseReadHandle = osThreadNew(colourSensorReadFunc, NULL, &colourSenseRead_attributes);
+  colourSenseReadHandle = osThreadNew(colourSensorReadTsk, NULL, &colourSenseRead_attributes);
 
   /* creation of wheelMotorTsk */
   wheelMotorTskHandle = osThreadNew(wheelMotorTask, NULL, &wheelMotorTsk_attributes);
@@ -682,6 +690,38 @@ bool colourSensorSetup(I2C_HandleTypeDef *i2cHandle)
 	printf("Colour Sensor has been enabled\n");
 	return true;
 }
+
+int colourSensorRead(I2C_HandleTypeDef *i2cHandle, uint16_t* red, uint16_t* green, uint16_t* blue, uint16_t* clear)
+{
+
+	int ret = 0;
+	uint8_t buf[2];
+
+	// Check if color data ready
+	//ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_STATUS, 1, buf, 1, HAL_MAX_DELAY);
+	//uint8_t c_data_ready = buf[0] & _BIT_MASK_STATUS_AVALID;
+
+	//read colour data from I2C
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_CDATAL, 1, buf, 2, HAL_MAX_DELAY);
+	*clear = buf[1] << 8 | buf[0];
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_RDATAL, 1, buf, 2, HAL_MAX_DELAY);
+	*red = buf[1] << 8 | buf[0];
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_GDATAL, 1, buf, 2, HAL_MAX_DELAY);
+	*green = buf[1] << 8 | buf[0];
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_BDATAL, 1, buf, 2, HAL_MAX_DELAY);
+	*blue = buf[1] << 8 | buf[0];
+
+	return ret;
+}
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_hearbeatTaskFunc */
@@ -694,22 +734,12 @@ bool colourSensorSetup(I2C_HandleTypeDef *i2cHandle)
 void hearbeatTaskFunc(void *argument)
 {
   /* USER CODE BEGIN 5 */
-  uint8_t heartbeat_message[] = "Hello World !!!\r\n"; // message to send
-  int i = 0;
-  /* Infinite loop */
-  for(;;)
-  {
-	 //HAL_UART_Transmit(&huart2,heartbeat_message,sizeof(heartbeat_message),10);// Sending in normal mode
-
-	setMotorDirection(FORWARD);
-	htim3.Instance->CCR1 = 125;
-	htim3.Instance->CCR2 = 125;
-	osDelay(2000);
-	setMotorDirection(BACKWARD);
-	htim3.Instance->CCR1 = 125;
-	htim3.Instance->CCR2 = 125;
-	osDelay(2000);
-  }
+	/* Infinite loop */
+	 for(;;)
+	 {
+		 printf("Heartbeat Alive");
+		 osDelay(10000);
+	 }
   /* USER CODE END 5 */
 }
 
@@ -740,89 +770,53 @@ void grabberMotorTaskFunc(void *argument)
   /* USER CODE END grabberMotorTaskFunc */
 }
 
-/* USER CODE BEGIN Header_colourSensorReadFunc */
+/* USER CODE BEGIN Header_colourSensorReadTsk */
 /**
 * @brief Function implementing the colourSenseRead thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_colourSensorReadFunc */
-void colourSensorReadFunc(void *argument)
+/* USER CODE END Header_colourSensorReadTsk */
+void colourSensorReadTsk(void *argument)
 {
-  /* USER CODE BEGIN colourSensorReadFunc */
-	int ret = 0;
-	uint8_t buf[8];
+  /* USER CODE BEGIN colourSensorReadTsk */
+
+	// setup i2C interfaces
+	colourSensorSetup(&hi2c3);
 	colourSensorSetup(&hi2c1);
 
- /* TODO: setting defaults */
- //Trigger proximity interrupt at >= 5, PPERS: 4 cycles
- //self.proximity_interrupt_threshold = (0, 5, 4)
- //Enter gesture engine at >= 5 proximity counts
- //self._write8(_APDS9960_GPENTH, 0x05)
- //Exit gesture engine if all counts drop below 30
- //self._write8(_APDS9960_GEXTH, 0x1E)
- //GEXPERS: 2 (4 cycles), GEXMSK: 0 (default) GFIFOTH: 2 (8 datasets)
- //self._write8(_APDS9960_GCONF1, 0x82)
- //GGAIN: 2 (4x), GLDRIVE: 100 mA (default), GWTIME: 1 (2.8ms)
- //self._write8(_APDS9960_GCONF2, 0x41)
- //GPULSE: 5 (6 pulses), GPLEN: 2 (16 us)
- //self._write8(_APDS9960_GPULSE, 0x85)
- //ATIME: 256 (712ms color integration time, max count of 65535)
- //self.color_integration_time = 256
- //AGAIN: 1 (4x color gain)
- //self.color_gain = 1
+	// define buffer variables
+	uint16_t clear_data_L = 0;
+	uint16_t red_data_L = 0;
+	uint16_t green_data_L = 0;
+	uint16_t blue_data_L = 0;
+	uint16_t clear_data_R = 0;
+	uint16_t red_data_R = 0;
+	uint16_t green_data_R = 0;
+	uint16_t blue_data_R = 0;
 
 
- // Check if color data ready
- ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_STATUS, 1, buf, 1, HAL_MAX_DELAY);
- uint8_t c_data_ready = buf[0] & _BIT_MASK_STATUS_AVALID;
-
- ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_CDATAL, 1, buf, 2, HAL_MAX_DELAY);
- uint16_t final_value =buf[1] << 8 | buf[0];
- int percent_value = 0;
- uint16_t clear_data = 0;
- uint16_t red_data = 0;
- uint16_t green_data = 0;
- uint16_t blue_data = 0;
-
-
-
-  /* Infinite loop */
-  for(;;)
-  {
-	ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_STATUS, 1, buf, 1, HAL_MAX_DELAY);
-	c_data_ready = buf[0] & _BIT_MASK_STATUS_AVALID;
-
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_CDATAL, 1, buf, 2, HAL_MAX_DELAY);
-	clear_data = buf[1] << 8 | buf[0];
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_RDATAL, 1, buf, 2, HAL_MAX_DELAY);
-	red_data = buf[1] << 8 | buf[0];
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_GDATAL, 1, buf, 2, HAL_MAX_DELAY);
-	green_data = buf[1] << 8 | buf[0];
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_BDATAL, 1, buf, 2, HAL_MAX_DELAY);
-	blue_data = buf[1] << 8 | buf[0];
-
-
-
-	printf("RGBC SENSOR #1: %d %d %d %d\n", red_data, green_data, blue_data, clear_data);
-
-	/*if(c_data_ready)
+	 /* Infinite loop */
+	for(;;)
 	{
-		printf("COLOR DATA NOT READY %x: %x & %x\n", final_value, buf[0], buf[1]);
-	} else {
-		printf("COLOR DATA READY  %x: %x & %x\n", final_value, buf[0], buf[1]);
-	}*/
-    osDelay(1100);
-  }
-  /* USER CODE END colourSensorReadFunc */
+		colourSensorRead(&hi2c3, &red_data_R, &green_data_R, &blue_data_R, &clear_data_R);
+		colourSensorRead(&hi2c1, &red_data_L, &green_data_L, &blue_data_L, &clear_data_L);
+
+		red_ratio_R = ((float)red_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
+		green_ratio_R = ((float)green_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
+		blue_ratio_R = ((float)blue_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
+
+		red_ratio_L = ((float)red_data_L / (float)(red_data_L+green_data_L+blue_data_L))*100;
+		green_ratio_L = ((float)green_data_L / (float)(red_data_L+green_data_L+blue_data_L))*100;
+		blue_ratio_L = ((float)blue_data_L / (float)(red_data_L+green_data_L+blue_data_L))*100;
+
+
+		printf("Right Sensor=> R:%.2f G:%.2f B:%.2f\n", red_ratio_R, green_ratio_R, blue_ratio_R);
+		printf("Left Sensor=> R:%.2f G:%.2f B:%.2f\n", red_ratio_L, green_ratio_L, blue_ratio_L);
+
+	    osDelay(1000);
+	 }
+  /* USER CODE END colourSensorReadTsk */
 }
 
 /* USER CODE BEGIN Header_wheelMotorTask */
@@ -835,48 +829,33 @@ void colourSensorReadFunc(void *argument)
 void wheelMotorTask(void *argument)
 {
   /* USER CODE BEGIN wheelMotorTask */
-	int ret = 0;
-	uint8_t buf[10];
-	colourSensorSetup(&hi2c3);
-
-	 // Check if color data ready
-	 ret = HAL_I2C_Mem_Read(&hi2c3, _APDS9960_I2C_ADDRESS, _APDS9960_STATUS, 1, buf, 1, HAL_MAX_DELAY);
-	 uint8_t c_data_ready = buf[0] & _BIT_MASK_STATUS_AVALID;
-
-	 ret = HAL_I2C_Mem_Read(&hi2c3, _APDS9960_I2C_ADDRESS, _APDS9960_CDATAL, 1, buf, 2, HAL_MAX_DELAY);
-	 uint16_t final_value =buf[1] << 8 | buf[0];
-	 int percent_value = 0;
-	 uint16_t clear_data = 0;
-	 uint16_t red_data = 0;
-	 uint16_t green_data = 0;
-	 uint16_t blue_data = 0;
-
 	  /* Infinite loop */
 	  for(;;)
 	  {
-		ret = HAL_I2C_Mem_Read(&hi2c3, _APDS9960_I2C_ADDRESS, _APDS9960_STATUS, 1, buf, 1, HAL_MAX_DELAY);
-		c_data_ready = buf[0] & _BIT_MASK_STATUS_AVALID;
+		setMotorDirection(FORWARD);
+		float diff = red_ratio_R-red_ratio_L;
 
-		buf[0] = 0;
-		buf[1] = 0;
-		ret = HAL_I2C_Mem_Read(&hi2c3, _APDS9960_I2C_ADDRESS, _APDS9960_CDATAL, 1, buf, 2, HAL_MAX_DELAY);
-		clear_data = buf[1] << 8 | buf[0];
-		buf[0] = 0;
-		buf[1] = 0;
-		ret = HAL_I2C_Mem_Read(&hi2c3, _APDS9960_I2C_ADDRESS, _APDS9960_RDATAL, 1, buf, 2, HAL_MAX_DELAY);
-		red_data = buf[1] << 8 | buf[0];
-		buf[0] = 0;
-		buf[1] = 0;
-		ret = HAL_I2C_Mem_Read(&hi2c3, _APDS9960_I2C_ADDRESS, _APDS9960_GDATAL, 1, buf, 2, HAL_MAX_DELAY);
-		green_data = buf[1] << 8 | buf[0];
-		buf[0] = 0;
-		buf[1] = 0;
-		ret = HAL_I2C_Mem_Read(&hi2c3, _APDS9960_I2C_ADDRESS, _APDS9960_BDATAL, 1, buf, 2, HAL_MAX_DELAY);
-		blue_data = buf[1] << 8 | buf[0];
+		if(diff > 5){
+			//turn right
+			//htim3.Instance->CCR2=75;
+			//htim3.Instance->CCR1=150;
 
-		printf("RGBC SENSOR #2: %d %d %d %d\n", red_data, green_data, blue_data, clear_data);
-	    osDelay(1000);
+		}
+		else if(diff<-5){
+			//turn left
+			//htim3.Instance->CCR2=150;
+			//htim3.Instance->CCR1=75;
+		}
+		else{
+			//htim3.Instance->CCR1=75;
+			//htim3.Instance->CCR2=75;
+		}
+		//setMotorDirection(BACKWARD);
+		//htim3.Instance->CCR1 = 75;
+		//htim3.Instance->CCR2 = 75;
+		osDelay(100);
 	  }
+
   /* USER CODE END wheelMotorTask */
 }
 

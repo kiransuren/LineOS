@@ -150,6 +150,8 @@ float red_ratio_L = 0;
 float green_ratio_L = 0;
 float blue_ratio_L = 0;
 
+bool enable_autonomy = false;
+
 /* USER CODE END 0 */
 
 /**
@@ -619,6 +621,16 @@ void setMotorsOff()
 	HAL_GPIO_WritePin(GPIOA, Output_4_Pin, GPIO_PIN_RESET);
 }
 
+void setRightMotorDutyCycle(uint16_t duty)
+{
+	htim3.Instance->CCR1=duty;
+}
+
+void setLeftMotorDutyCycle(uint16_t duty)
+{
+	htim3.Instance->CCR2=duty;
+}
+
 bool colourSensorSetup(I2C_HandleTypeDef *i2cHandle)
 {
 	printf("Colour Sensor Setup BEGIN\n");
@@ -737,7 +749,13 @@ void hearbeatTaskFunc(void *argument)
 	/* Infinite loop */
 	 for(;;)
 	 {
-		 printf("Heartbeat Alive");
+//		 if(!HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin))
+//		 {
+//			 enable_autonomy= !enable_autonomy;
+//			 printf("Button pressed!");
+//			 osDelay(50);
+//		 }
+		 printf("Heartbeat!\n");
 		 osDelay(10000);
 	 }
   /* USER CODE END 5 */
@@ -804,17 +822,22 @@ void colourSensorReadTsk(void *argument)
 
 		red_ratio_R = ((float)red_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
 		green_ratio_R = ((float)green_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
+		//green_ratio_R = (float)(red_data_R+green_data_R+blue_data_R);
 		blue_ratio_R = ((float)blue_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
 
 		red_ratio_L = ((float)red_data_L / (float)(red_data_L+green_data_L+blue_data_L))*100;
 		green_ratio_L = ((float)green_data_L / (float)(red_data_L+green_data_L+blue_data_L))*100;
+		//green_ratio_L = (float)(red_data_L+green_data_L+blue_data_L);
 		blue_ratio_L = ((float)blue_data_L / (float)(red_data_L+green_data_L+blue_data_L))*100;
 
+		//red ratio redefinition
+		//red_ratio_R =((float)red_data_R / (float)(red_data_R+red_data_L))*100;
+		//red_ratio_L =((float)red_data_L / (float)(red_data_R+red_data_L))*100;
 
 		printf("Right Sensor=> R:%.2f G:%.2f B:%.2f\n", red_ratio_R, green_ratio_R, blue_ratio_R);
 		printf("Left Sensor=> R:%.2f G:%.2f B:%.2f\n", red_ratio_L, green_ratio_L, blue_ratio_L);
 
-	    osDelay(1000);
+	    osDelay(10);
 	 }
   /* USER CODE END colourSensorReadTsk */
 }
@@ -829,31 +852,35 @@ void colourSensorReadTsk(void *argument)
 void wheelMotorTask(void *argument)
 {
   /* USER CODE BEGIN wheelMotorTask */
+	float buffer = 6;
+	uint16_t speed = 100;
 	  /* Infinite loop */
 	  for(;;)
 	  {
+		if(!enable_autonomy)
+		{
+			setRightMotorDutyCycle(0);
+			setLeftMotorDutyCycle(0);
+			continue;
+		}
 		setMotorDirection(FORWARD);
 		float diff = red_ratio_R-red_ratio_L;
 
-		if(diff > 5){
+		if(diff > buffer){
 			//turn right
-			//htim3.Instance->CCR2=75;
-			//htim3.Instance->CCR1=150;
+			setLeftMotorDutyCycle(speed*0.95);
+			setRightMotorDutyCycle(0);
 
 		}
-		else if(diff<-5){
+		else if(diff < -buffer){
 			//turn left
-			//htim3.Instance->CCR2=150;
-			//htim3.Instance->CCR1=75;
+			setLeftMotorDutyCycle(0);
+			setRightMotorDutyCycle(speed);
 		}
 		else{
-			//htim3.Instance->CCR1=75;
-			//htim3.Instance->CCR2=75;
+			setLeftMotorDutyCycle(speed*0.95);
+			setRightMotorDutyCycle(speed);
 		}
-		//setMotorDirection(BACKWARD);
-		//htim3.Instance->CCR1 = 75;
-		//htim3.Instance->CCR2 = 75;
-		osDelay(100);
 	  }
 
   /* USER CODE END wheelMotorTask */

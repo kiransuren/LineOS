@@ -22,7 +22,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -32,7 +33,37 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+// Only one address is possible for the APDS9960, no alternates are available
+static const uint16_t _APDS9960_I2C_ADDRESS = 0x39<<1; //use 8-bit address
+//#define _DEVICE_IDS = (const(0xAB), const(0xA8))
+#define _APDS9960_ENABLE 0x80
+#define _APDS9960_ATIME 0x81
+#define _APDS9960_PILT 0x89
+#define _APDS9960_PIHT 0x8B
+#define _APDS9960_PERS 0x8C
+#define _APDS9960_CONTROL 0x8F
+#define _APDS9960_ID 0x92
+#define _APDS9960_STATUS 0x93
+#define _APDS9960_CDATAL 0x94
+#define _APDS9960_RDATAL 0x96
+#define _APDS9960_GDATAL 0x98
+#define _APDS9960_BDATAL 0x9A
+#define _APDS9960_PDATA 0x9C
+#define _APDS9960_GPENTH 0xA0
+#define _APDS9960_GEXTH 0xA1
+#define _APDS9960_GCONF1 0xA2
+#define _APDS9960_GCONF2 0xA3
+#define _APDS9960_GPULSE 0xA6
+#define _APDS9960_GCONF4 0xAB
+#define _APDS9960_GFLVL 0xAE
+#define _APDS9960_GSTATUS 0xAF
+#define _APDS9960_AICLEAR 0xE7
+#define _APDS9960_GFIFO_U 0xFC
 
+#define _BIT_MASK_GCONF4_GFIFO_CLR 0x04
+#define _BIT_MASK_ENABLE_EN 0x01
+#define _BIT_MASK_ENABLE_COLOR 0x02
+#define _BIT_MASK_STATUS_AVALID 0x01
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -41,6 +72,9 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+I2C_HandleTypeDef hi2c1;
+I2C_HandleTypeDef hi2c3;
+
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
 
@@ -60,6 +94,20 @@ const osThreadAttr_t grabberMotorTsk_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
+/* Definitions for colourSenseRead */
+osThreadId_t colourSenseReadHandle;
+const osThreadAttr_t colourSenseRead_attributes = {
+  .name = "colourSenseRead",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for wheelMotorTsk */
+osThreadId_t wheelMotorTskHandle;
+const osThreadAttr_t wheelMotorTsk_attributes = {
+  .name = "wheelMotorTsk",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -67,18 +115,40 @@ const osThreadAttr_t grabberMotorTsk_attributes = {
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_TIM1_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM3_Init(void);
+static void MX_I2C1_Init(void);
+static void MX_I2C3_Init(void);
+static void MX_TIM1_Init(void);
 void hearbeatTaskFunc(void *argument);
 void grabberMotorTaskFunc(void *argument);
+void colourSensorReadTsk(void *argument);
+void wheelMotorTask(void *argument);
 
 /* USER CODE BEGIN PFP */
+#ifdef __GNUC__
+#define PUTCHAR_PROTOTYPE int __io_putchar(int ch)
+#else
+#define PUTCHAR_PROTOTYPE int fputc(int ch, FILE *f)
+#endif
+
+PUTCHAR_PROTOTYPE
+{
+  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+  return ch;
+}
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+float red_ratio_R = 0;
+float green_ratio_R = 0;
+float blue_ratio_R = 0;
+
+float red_ratio_L = 0;
+float green_ratio_L = 0;
+float blue_ratio_L = 0;
 
 /* USER CODE END 0 */
 
@@ -99,6 +169,7 @@ int main(void)
 
   /* USER CODE BEGIN Init */
 
+
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -110,14 +181,16 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_TIM1_Init();
   MX_USART2_UART_Init();
   MX_TIM3_Init();
+  MX_I2C1_Init();
+  MX_I2C3_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
 
   // Start timer for grabber servo
-  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-  htim1.Instance->CCR1 = 50; // initialize pulse width to 1ms = 0 degree positon
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+  //htim1.Instance->CCR2 = 50; // initialize pulse width to 1ms = 0 degree positon
 
   // Start timer for motor driver (left and right motors)
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
@@ -152,6 +225,12 @@ int main(void)
 
   /* creation of grabberMotorTsk */
   grabberMotorTskHandle = osThreadNew(grabberMotorTaskFunc, NULL, &grabberMotorTsk_attributes);
+
+  /* creation of colourSenseRead */
+  colourSenseReadHandle = osThreadNew(colourSensorReadTsk, NULL, &colourSenseRead_attributes);
+
+  /* creation of wheelMotorTsk */
+  wheelMotorTskHandle = osThreadNew(wheelMotorTask, NULL, &wheelMotorTsk_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -222,6 +301,74 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.ClockSpeed = 100000;
+  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief I2C3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C3_Init(void)
+{
+
+  /* USER CODE BEGIN I2C3_Init 0 */
+
+  /* USER CODE END I2C3_Init 0 */
+
+  /* USER CODE BEGIN I2C3_Init 1 */
+
+  /* USER CODE END I2C3_Init 1 */
+  hi2c3.Instance = I2C3;
+  hi2c3.Init.ClockSpeed = 100000;
+  hi2c3.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c3.Init.OwnAddress1 = 0;
+  hi2c3.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c3.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c3.Init.OwnAddress2 = 0;
+  hi2c3.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c3.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C3_Init 2 */
+
+  /* USER CODE END I2C3_Init 2 */
+
+}
+
+/**
   * @brief TIM1 Initialization Function
   * @param None
   * @retval None
@@ -264,7 +411,7 @@ static void MX_TIM1_Init(void)
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
   sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
   {
     Error_Handler();
   }
@@ -390,10 +537,10 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, LD2_Pin|Output_4_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, LD2_Pin|Output_4_Pin|Output_2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, Output_1_Pin|Output_2_Pin|Output_3_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, Output_1_Pin|Output_3_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
@@ -408,19 +555,19 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : Output_1_Pin Output_2_Pin Output_3_Pin */
-  GPIO_InitStruct.Pin = Output_1_Pin|Output_2_Pin|Output_3_Pin;
+  /*Configure GPIO pins : Output_1_Pin Output_3_Pin */
+  GPIO_InitStruct.Pin = Output_1_Pin|Output_3_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : Output_4_Pin */
-  GPIO_InitStruct.Pin = Output_4_Pin;
+  /*Configure GPIO pins : Output_4_Pin Output_2_Pin */
+  GPIO_InitStruct.Pin = Output_4_Pin|Output_2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
-  HAL_GPIO_Init(Output_4_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
@@ -436,7 +583,7 @@ void setMotorDirection(motor_direction_t direction)
 {
 	// Resetting all
 	HAL_GPIO_WritePin(GPIOB, Output_1_Pin, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOB, Output_2_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOA, Output_2_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOB, Output_3_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOA, Output_4_Pin, GPIO_PIN_RESET);
 	uint8_t broken_message[] = "FIX MOTORS\r\n"; // message to send
@@ -444,7 +591,7 @@ void setMotorDirection(motor_direction_t direction)
 	{
 		//Setting motor 1 to forward
 		//HAL_GPIO_WritePin(GPIOB, Output_2_Pin, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOB, Output_2_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOA, Output_2_Pin, GPIO_PIN_SET);
 
 		//Setting motor 2 to forward
 		//HAL_GPIO_WritePin(GPIOB, Output_4_Pin, GPIO_PIN_RESET);
@@ -467,10 +614,114 @@ void setMotorsOff()
 {
 	// Resetting all motor input pins
 	HAL_GPIO_WritePin(GPIOB, Output_1_Pin, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOB, Output_2_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOA, Output_2_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOB, Output_3_Pin, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOB, Output_4_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOA, Output_4_Pin, GPIO_PIN_RESET);
 }
+
+bool colourSensorSetup(I2C_HandleTypeDef *i2cHandle)
+{
+	printf("Colour Sensor Setup BEGIN\n");
+	HAL_StatusTypeDef ret = HAL_OK;
+	uint8_t buf[2];
+	//Reset basic config registers to power-on defaults
+	buf[0] = _APDS9960_GPENTH;
+	buf[1] = 0;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	buf[0] = _APDS9960_GEXTH;
+	buf[1] = 0;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	buf[0] = _APDS9960_GCONF1;
+	buf[1] = 0;
+	ret = HAL_I2C_Master_Transmit(&hi2c1, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	buf[0] = _APDS9960_GCONF2;
+	buf[1] = 0;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	buf[0] = _APDS9960_GCONF4;
+	buf[1] = 0;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	buf[0] = _APDS9960_GPULSE;
+	buf[1] = 0;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	buf[0] = _APDS9960_ATIME;
+	buf[1] = 175;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	buf[0] = _APDS9960_CONTROL;
+	buf[1] = 3;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	buf[0] = _APDS9960_CONTROL;
+	buf[1] = 3;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+
+	//Clear all non-gesture interrupts
+	buf[0] = _APDS9960_AICLEAR;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 1, HAL_MAX_DELAY);
+
+	//Clear gesture FIFOs and interrupt
+	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_GCONF4, 1, buf, 1, HAL_MAX_DELAY);
+	buf[1] = buf[0];	// move current GCONF4 value into buf[1]
+	buf[1] |= _BIT_MASK_GCONF4_GFIFO_CLR;
+	buf[0] = _APDS9960_GCONF4;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+
+	//Disable sensor and all functions/interrupts
+	buf[0] = _APDS9960_ENABLE;
+	buf[1] = 0;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	osDelay(1); //Sleeping could take at ~2-25 ms if engines were looping
+
+	//Re-enable sensor and wait 10ms for the power on delay to finish
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_ENABLE, 1, buf, 1, HAL_MAX_DELAY);
+	buf[1] = buf[0];	// move current _APDS9960_ENABLE value into buf[1]
+	buf[1] |= _BIT_MASK_ENABLE_EN;
+	buf[1] |= _BIT_MASK_ENABLE_COLOR;
+	buf[0] = _APDS9960_ENABLE;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	osDelay(1);
+	buf[0] = 100;
+	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_ENABLE, 1, buf, 1, HAL_MAX_DELAY);
+
+	if(ret != HAL_OK)
+	{
+		return false;
+	}
+	printf("Colour Sensor has been enabled\n");
+	return true;
+}
+
+int colourSensorRead(I2C_HandleTypeDef *i2cHandle, uint16_t* red, uint16_t* green, uint16_t* blue, uint16_t* clear)
+{
+
+	int ret = 0;
+	uint8_t buf[2];
+
+	// Check if color data ready
+	//ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_STATUS, 1, buf, 1, HAL_MAX_DELAY);
+	//uint8_t c_data_ready = buf[0] & _BIT_MASK_STATUS_AVALID;
+
+	//read colour data from I2C
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_CDATAL, 1, buf, 2, HAL_MAX_DELAY);
+	*clear = buf[1] << 8 | buf[0];
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_RDATAL, 1, buf, 2, HAL_MAX_DELAY);
+	*red = buf[1] << 8 | buf[0];
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_GDATAL, 1, buf, 2, HAL_MAX_DELAY);
+	*green = buf[1] << 8 | buf[0];
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_BDATAL, 1, buf, 2, HAL_MAX_DELAY);
+	*blue = buf[1] << 8 | buf[0];
+
+	return ret;
+}
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_hearbeatTaskFunc */
@@ -483,31 +734,12 @@ void setMotorsOff()
 void hearbeatTaskFunc(void *argument)
 {
   /* USER CODE BEGIN 5 */
-  uint8_t heartbeat_message[] = "Hello World !!!\r\n"; // message to send
-  int i = 0;
-  /* Infinite loop */
-  for(;;)
-  {
-	 //HAL_UART_Transmit(&huart2,heartbeat_message,sizeof(heartbeat_message),10);// Sending in normal mode
-
-	setMotorDirection(FORWARD);
-	htim3.Instance->CCR1 = 125;
-	htim3.Instance->CCR2 = 125;
-	osDelay(2000);
-	setMotorDirection(BACKWARD);
-	htim3.Instance->CCR1 = 125;
-	htim3.Instance->CCR2 = 125;
-	osDelay(2000);
-	/*if (i==100) {
-		i=0;
-		HAL_UART_Transmit(&huart2,heartbeat_message,sizeof(heartbeat_message),10);
-	}
-	htim3.Instance->CCR1 = 125;
-	htim3.Instance->CCR2 = 125;
-	i+=10;
-	osDelay(10);
-	*/
-  }
+	/* Infinite loop */
+	 for(;;)
+	 {
+		 printf("Heartbeat Alive");
+		 osDelay(10000);
+	 }
   /* USER CODE END 5 */
 }
 
@@ -529,13 +761,102 @@ void grabberMotorTaskFunc(void *argument)
   for(;;)
   {
 	if (i==100) {
-		i=0;
+		i=50;
 	}
-	htim1.Instance->CCR1 = i;
+	htim1.Instance->CCR2 = i;
 	i+=10;
-	osDelay(10);
+	osDelay(200);
   }
   /* USER CODE END grabberMotorTaskFunc */
+}
+
+/* USER CODE BEGIN Header_colourSensorReadTsk */
+/**
+* @brief Function implementing the colourSenseRead thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_colourSensorReadTsk */
+void colourSensorReadTsk(void *argument)
+{
+  /* USER CODE BEGIN colourSensorReadTsk */
+
+	// setup i2C interfaces
+	colourSensorSetup(&hi2c3);
+	colourSensorSetup(&hi2c1);
+
+	// define buffer variables
+	uint16_t clear_data_L = 0;
+	uint16_t red_data_L = 0;
+	uint16_t green_data_L = 0;
+	uint16_t blue_data_L = 0;
+	uint16_t clear_data_R = 0;
+	uint16_t red_data_R = 0;
+	uint16_t green_data_R = 0;
+	uint16_t blue_data_R = 0;
+
+
+	 /* Infinite loop */
+	for(;;)
+	{
+		colourSensorRead(&hi2c3, &red_data_R, &green_data_R, &blue_data_R, &clear_data_R);
+		colourSensorRead(&hi2c1, &red_data_L, &green_data_L, &blue_data_L, &clear_data_L);
+
+		red_ratio_R = ((float)red_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
+		green_ratio_R = ((float)green_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
+		blue_ratio_R = ((float)blue_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
+
+		red_ratio_L = ((float)red_data_L / (float)(red_data_L+green_data_L+blue_data_L))*100;
+		green_ratio_L = ((float)green_data_L / (float)(red_data_L+green_data_L+blue_data_L))*100;
+		blue_ratio_L = ((float)blue_data_L / (float)(red_data_L+green_data_L+blue_data_L))*100;
+
+
+		printf("Right Sensor=> R:%.2f G:%.2f B:%.2f\n", red_ratio_R, green_ratio_R, blue_ratio_R);
+		printf("Left Sensor=> R:%.2f G:%.2f B:%.2f\n", red_ratio_L, green_ratio_L, blue_ratio_L);
+
+	    osDelay(1000);
+	 }
+  /* USER CODE END colourSensorReadTsk */
+}
+
+/* USER CODE BEGIN Header_wheelMotorTask */
+/**
+* @brief Function implementing the wheelMotorTsk thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_wheelMotorTask */
+void wheelMotorTask(void *argument)
+{
+  /* USER CODE BEGIN wheelMotorTask */
+	  /* Infinite loop */
+	  for(;;)
+	  {
+		setMotorDirection(FORWARD);
+		float diff = red_ratio_R-red_ratio_L;
+
+		if(diff > 5){
+			//turn right
+			//htim3.Instance->CCR2=75;
+			//htim3.Instance->CCR1=150;
+
+		}
+		else if(diff<-5){
+			//turn left
+			//htim3.Instance->CCR2=150;
+			//htim3.Instance->CCR1=75;
+		}
+		else{
+			//htim3.Instance->CCR1=75;
+			//htim3.Instance->CCR2=75;
+		}
+		//setMotorDirection(BACKWARD);
+		//htim3.Instance->CCR1 = 75;
+		//htim3.Instance->CCR2 = 75;
+		osDelay(100);
+	  }
+
+  /* USER CODE END wheelMotorTask */
 }
 
 /**

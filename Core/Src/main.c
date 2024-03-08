@@ -153,9 +153,11 @@ float green_ratio_L = 0;
 float blue_ratio_L = 0;
 
 bool enable_autonomy = false;
-bool enable_motor_test = true;
+bool enable_motor_test = false;
 
 float control_signal = 0;
+
+volatile uint32_t elapsedTimeMs =0;
 
 /* USER CODE END 0 */
 
@@ -906,14 +908,14 @@ void colourSensorReadTsk(void *argument)
 void wheelMotorTask(void *argument)
 {
   /* USER CODE BEGIN wheelMotorTask */
-	float buffer = 1;		//3, 6
-	uint16_t h_speed = 100; //100, 125
-	uint16_t l_speed = 75;
-	float right_adjustment = 1;
-	float left_adjustment = 0.95;
+	float buffer = 3;		//3, 6
+	uint16_t h_speed = 150; //100, 125
+	uint16_t l_speed = 70;
+	float right_adjustment = 0.95;
+	float left_adjustment = 1;
 
 
-	const float Kp = 0;
+	const float Kp = 1;
 	const float Ki = 0;
 	const float Kd = 0;
 
@@ -924,6 +926,7 @@ void wheelMotorTask(void *argument)
 	  /* Infinite loop */
 	  for(;;)
 	  {
+		startTick = xTaskGetTickCount();
 		if(!enable_autonomy)
 		{
 			setRightMotorDutyCycle(0);
@@ -931,19 +934,17 @@ void wheelMotorTask(void *argument)
 			continue;
 		}
 		setMotorDirection(FORWARD);
-		endTick = xTaskGetTickCount();
 
-		elapsedTicks = endTick - startTick;
-		uint32_t elapsedTimeMs = elapsedTicks;
 		float error = red_ratio_R-red_ratio_L;
 
-		float derivative = (error-previous_error) / (float)elapsedTimeMs/1000.0;
+		float derivative = (error-previous_error) / 100;
 		previous_error = error;
-		integral += Ki * (float)elapsedTimeMs/1000.0;
+		integral += Ki * 100;
 
 		control_signal = Kp * error + Kd * derivative + Ki * integral;
 
-		startTick = xTaskGetTickCount();
+
+		control_signal-= elapsedTimeMs;
 
 		// Motor Control Test
 		if(enable_motor_test)
@@ -983,22 +984,27 @@ void wheelMotorTask(void *argument)
 
 		}
 
-		if(error > buffer){
+		if(control_signal > 0)
+		{
 			//turn right
-			setLeftMotorDutyCycle(h_speed*left_adjustment);
-			setRightMotorDutyCycle(l_speed*right_adjustment);
+			setLeftMotorDutyCycle(h_speed*control_signal);
+			setRightMotorDutyCycle(h_speed-(h_speed*control_signal));
+		}
+		else if (control_signal < 0)
+		{
+			//turn left
+			setLeftMotorDutyCycle(h_speed-(h_speed*-control_signal));
+			setRightMotorDutyCycle(h_speed*-control_signal);
 
 		}
-		else if(error < -buffer){
-			//turn left
-			setLeftMotorDutyCycle(l_speed*left_adjustment);
-			setRightMotorDutyCycle(h_speed*right_adjustment);
-		}
 		else{
-			setLeftMotorDutyCycle(h_speed*left_adjustment);
-			setRightMotorDutyCycle(h_speed*right_adjustment);
+			setLeftMotorDutyCycle(h_speed);
+			setRightMotorDutyCycle(h_speed);
 		}
-		//osDelay(25);
+		elapsedTimeMs = xTaskGetTickCount();
+		elapsedTicks = endTick - startTick;
+		//elapsedTimeMs = elapsedTicks;
+		osDelay(100);
 	  }
 
   /* USER CODE END wheelMotorTask */

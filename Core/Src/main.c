@@ -86,7 +86,7 @@ osThreadId_t heartbeatTskHandle;
 const osThreadAttr_t heartbeatTsk_attributes = {
   .name = "heartbeatTsk",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .priority = (osPriority_t) osPriorityLow,
 };
 /* Definitions for grabberMotorTsk */
 osThreadId_t grabberMotorTskHandle;
@@ -152,7 +152,10 @@ float red_ratio_L = 0;
 float green_ratio_L = 0;
 float blue_ratio_L = 0;
 
-bool enable_autonomy = true;
+bool enable_autonomy = false;
+bool enable_motor_test = false;
+
+float control_signal = 0;
 
 /* USER CODE END 0 */
 
@@ -794,17 +797,20 @@ int colourSensorRead(I2C_HandleTypeDef *i2cHandle, uint16_t* red, uint16_t* gree
 void hearbeatTaskFunc(void *argument)
 {
   /* USER CODE BEGIN 5 */
+	bool debounce = false;
 	/* Infinite loop */
 	 for(;;)
 	 {
-//		 if(!HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin))
-//		 {
-//			 enable_autonomy= !enable_autonomy;
-//			 printf("Button pressed!");
-//			 osDelay(50);
-//		 }
-		 printf("Heartbeat!\n");
-		 osDelay(10000);
+		 if(!HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin))
+		 {
+			 debounce = true;
+			 osDelay(150);
+		 }else if(debounce)
+		 {
+			 debounce = false;
+			 enable_autonomy = !enable_autonomy;
+			 printf("Button pressed, new autonomy state %d!", enable_autonomy);
+		 }
 	 }
   /* USER CODE END 5 */
 }
@@ -900,9 +906,21 @@ void colourSensorReadTsk(void *argument)
 void wheelMotorTask(void *argument)
 {
   /* USER CODE BEGIN wheelMotorTask */
-	float buffer = 6;		//3
-	uint16_t h_speed = 125; //100
+	float buffer = 5;		//3, 6
+	uint16_t h_speed = 100; //100, 125
 	uint16_t l_speed = 50;
+	uint16_t right_adjustment =1;
+	uint16_t left_adjustment = 1;
+
+
+	const float Kp = 0;
+	const float Ki = 0;
+	const float Kd = 0;
+
+	float previous_error = 0;
+	float integral = 0;
+
+	TickType_t endTick, startTick, elapsedTicks;
 	  /* Infinite loop */
 	  for(;;)
 	  {
@@ -913,22 +931,58 @@ void wheelMotorTask(void *argument)
 			continue;
 		}
 		setMotorDirection(FORWARD);
-		float diff = red_ratio_R-red_ratio_L;
+		endTick = xTaskGetTickCount();
 
-		if(diff > buffer){
-			//turn right
-			setLeftMotorDutyCycle(h_speed);
-			setRightMotorDutyCycle(l_speed);
+		elapsedTicks = endTick - startTick;
+		uint32_t elapsedTimeMs = elapsedTicks;
+		float error = red_ratio_R-red_ratio_L;
+
+		float derivative = (error-previous_error) / (float)elapsedTimeMs/1000.0;
+		previous_error = error;
+		integral += Ki * (float)elapsedTimeMs/1000.0;
+
+		control_signal = Kp * error + Kd * derivative + Ki * integral;
+
+		startTick = xTaskGetTickCount();
+
+		// Motor Control Test
+		if(enable_motor_test)
+		{
+			// Move Forward
+			setMotorDirection(FORWARD);
+			setLeftMotorDutyCycle(h_speed*left_adjustment);
+			setRightMotorDutyCycle(h_speed*right_adjustment);
+			osDelay(1000);
+
+			// Move Right
+			//setMotorDirection(FORWARD);
+			//setLeftMotorDutyCycle(h_speed);
+			//setRightMotorDutyCycle(0);
+			//osDelay(200);
+
+			// Move Backwards
+			//setMotorDirection(BACKWARD);
+			//setLeftMotorDutyCycle(h_speed);
+			//setRightMotorDutyCycle(h_speed);
+			//osDelay(1000);
+			continue;
 
 		}
-		else if(diff < -buffer){
+
+		if(error > buffer){
+			//turn right
+			setLeftMotorDutyCycle(h_speed*left_adjustment);
+			setRightMotorDutyCycle(l_speed*right_adjustment);
+
+		}
+		else if(error < -buffer){
 			//turn left
-			setLeftMotorDutyCycle(l_speed);
-			setRightMotorDutyCycle(h_speed);
+			setLeftMotorDutyCycle(l_speed*left_adjustment);
+			setRightMotorDutyCycle(h_speed*right_adjustment);
 		}
 		else{
-			setLeftMotorDutyCycle(h_speed);
-			setRightMotorDutyCycle(h_speed);
+			setLeftMotorDutyCycle(h_speed*left_adjustment);
+			setRightMotorDutyCycle(h_speed*right_adjustment);
 		}
 		//osDelay(25);
 	  }

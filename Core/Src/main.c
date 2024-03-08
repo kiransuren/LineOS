@@ -153,7 +153,7 @@ float green_ratio_L = 0;
 float blue_ratio_L = 0;
 
 bool enable_autonomy = false;
-bool enable_motor_test = false;
+bool enable_motor_test = true;
 
 float control_signal = 0;
 
@@ -634,7 +634,7 @@ typedef enum {
 void setMotorDirection(motor_direction_t direction)
 {
 	// Resetting all
-	HAL_GPIO_WritePin(GPIOB, Output_1_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOC, Output_1_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOA, Output_2_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOB, Output_3_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOA, Output_4_Pin, GPIO_PIN_RESET);
@@ -652,7 +652,7 @@ void setMotorDirection(motor_direction_t direction)
 	else if (direction == BACKWARD)
 	{
 		//Setting motor 1 to backward
-		HAL_GPIO_WritePin(GPIOB, Output_1_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOC, Output_1_Pin, GPIO_PIN_SET);
 		//Setting motor 2 to backward
 		HAL_GPIO_WritePin(GPIOB, Output_3_Pin, GPIO_PIN_SET);
 	}
@@ -665,7 +665,7 @@ void setMotorDirection(motor_direction_t direction)
 void setMotorsOff()
 {
 	// Resetting all motor input pins
-	HAL_GPIO_WritePin(GPIOB, Output_1_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOC, Output_1_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOA, Output_2_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOB, Output_3_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOA, Output_4_Pin, GPIO_PIN_RESET);
@@ -906,11 +906,11 @@ void colourSensorReadTsk(void *argument)
 void wheelMotorTask(void *argument)
 {
   /* USER CODE BEGIN wheelMotorTask */
-	float buffer = 5;		//3, 6
+	float buffer = 1;		//3, 6
 	uint16_t h_speed = 100; //100, 125
-	uint16_t l_speed = 50;
-	uint16_t right_adjustment =1;
-	uint16_t left_adjustment = 1;
+	uint16_t l_speed = 75;
+	float right_adjustment = 1;
+	float left_adjustment = 0.95;
 
 
 	const float Kp = 0;
@@ -954,17 +954,31 @@ void wheelMotorTask(void *argument)
 			setRightMotorDutyCycle(h_speed*right_adjustment);
 			osDelay(1000);
 
-			// Move Right
-			//setMotorDirection(FORWARD);
-			//setLeftMotorDutyCycle(h_speed);
-			//setRightMotorDutyCycle(0);
-			//osDelay(200);
+			setLeftMotorDutyCycle(0);
+			setRightMotorDutyCycle(0);
+			osDelay(500);
 
-			// Move Backwards
-			//setMotorDirection(BACKWARD);
-			//setLeftMotorDutyCycle(h_speed);
-			//setRightMotorDutyCycle(h_speed);
-			//osDelay(1000);
+			// Move Right
+			setMotorDirection(FORWARD);
+			setLeftMotorDutyCycle(h_speed);
+			setRightMotorDutyCycle(0);
+			osDelay(1900);
+
+			setLeftMotorDutyCycle(0);
+			setRightMotorDutyCycle(0);
+			osDelay(500);
+
+
+			//Move Backwards
+			setMotorDirection(BACKWARD);
+			setLeftMotorDutyCycle(h_speed);
+			setRightMotorDutyCycle(h_speed);
+			osDelay(1000);
+
+			setLeftMotorDutyCycle(0);
+			setRightMotorDutyCycle(0);
+			osDelay(500);
+
 			continue;
 
 		}

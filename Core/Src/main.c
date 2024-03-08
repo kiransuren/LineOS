@@ -73,6 +73,7 @@ static const uint16_t _APDS9960_I2C_ADDRESS = 0x39<<1; //use 8-bit address
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
+I2C_HandleTypeDef hi2c2;
 I2C_HandleTypeDef hi2c3;
 
 TIM_HandleTypeDef htim1;
@@ -85,7 +86,7 @@ osThreadId_t heartbeatTskHandle;
 const osThreadAttr_t heartbeatTsk_attributes = {
   .name = "heartbeatTsk",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .priority = (osPriority_t) osPriorityLow,
 };
 /* Definitions for grabberMotorTsk */
 osThreadId_t grabberMotorTskHandle;
@@ -120,6 +121,7 @@ static void MX_TIM3_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_I2C3_Init(void);
 static void MX_TIM1_Init(void);
+static void MX_I2C2_Init(void);
 void hearbeatTaskFunc(void *argument);
 void grabberMotorTaskFunc(void *argument);
 void colourSensorReadTsk(void *argument);
@@ -149,6 +151,11 @@ float blue_ratio_R = 0;
 float red_ratio_L = 0;
 float green_ratio_L = 0;
 float blue_ratio_L = 0;
+
+bool enable_autonomy = false;
+bool enable_motor_test = true;
+
+float control_signal = 0;
 
 /* USER CODE END 0 */
 
@@ -186,6 +193,7 @@ int main(void)
   MX_I2C1_Init();
   MX_I2C3_Init();
   MX_TIM1_Init();
+  MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
 
   // Start timer for grabber servo
@@ -331,6 +339,40 @@ static void MX_I2C1_Init(void)
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief I2C2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C2_Init(void)
+{
+
+  /* USER CODE BEGIN I2C2_Init 0 */
+
+  /* USER CODE END I2C2_Init 0 */
+
+  /* USER CODE BEGIN I2C2_Init 1 */
+
+  /* USER CODE END I2C2_Init 1 */
+  hi2c2.Instance = I2C2;
+  hi2c2.Init.ClockSpeed = 100000;
+  hi2c2.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c2.Init.OwnAddress1 = 0;
+  hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c2.Init.OwnAddress2 = 0;
+  hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C2_Init 2 */
+
+  /* USER CODE END I2C2_Init 2 */
 
 }
 
@@ -540,7 +582,10 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, LD2_Pin|Output_4_Pin|Output_2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, Output_1_Pin|Output_3_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(Output_1_GPIO_Port, Output_1_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(Output_3_GPIO_Port, Output_3_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
@@ -555,12 +600,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : Output_1_Pin Output_3_Pin */
-  GPIO_InitStruct.Pin = Output_1_Pin|Output_3_Pin;
+  /*Configure GPIO pin : Output_1_Pin */
+  GPIO_InitStruct.Pin = Output_1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  HAL_GPIO_Init(Output_1_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : Output_4_Pin Output_2_Pin */
   GPIO_InitStruct.Pin = Output_4_Pin|Output_2_Pin;
@@ -568,6 +613,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : Output_3_Pin */
+  GPIO_InitStruct.Pin = Output_3_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
+  HAL_GPIO_Init(Output_3_GPIO_Port, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
@@ -582,7 +634,7 @@ typedef enum {
 void setMotorDirection(motor_direction_t direction)
 {
 	// Resetting all
-	HAL_GPIO_WritePin(GPIOB, Output_1_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOC, Output_1_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOA, Output_2_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOB, Output_3_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOA, Output_4_Pin, GPIO_PIN_RESET);
@@ -600,7 +652,7 @@ void setMotorDirection(motor_direction_t direction)
 	else if (direction == BACKWARD)
 	{
 		//Setting motor 1 to backward
-		HAL_GPIO_WritePin(GPIOB, Output_1_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOC, Output_1_Pin, GPIO_PIN_SET);
 		//Setting motor 2 to backward
 		HAL_GPIO_WritePin(GPIOB, Output_3_Pin, GPIO_PIN_SET);
 	}
@@ -613,10 +665,20 @@ void setMotorDirection(motor_direction_t direction)
 void setMotorsOff()
 {
 	// Resetting all motor input pins
-	HAL_GPIO_WritePin(GPIOB, Output_1_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOC, Output_1_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOA, Output_2_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOB, Output_3_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(GPIOA, Output_4_Pin, GPIO_PIN_RESET);
+}
+
+void setRightMotorDutyCycle(uint16_t duty)
+{
+	htim3.Instance->CCR1=duty;
+}
+
+void setLeftMotorDutyCycle(uint16_t duty)
+{
+	htim3.Instance->CCR2=duty;
 }
 
 bool colourSensorSetup(I2C_HandleTypeDef *i2cHandle)
@@ -685,6 +747,7 @@ bool colourSensorSetup(I2C_HandleTypeDef *i2cHandle)
 
 	if(ret != HAL_OK)
 	{
+		printf("Colour sensor enable FAILED");
 		return false;
 	}
 	printf("Colour Sensor has been enabled\n");
@@ -734,11 +797,20 @@ int colourSensorRead(I2C_HandleTypeDef *i2cHandle, uint16_t* red, uint16_t* gree
 void hearbeatTaskFunc(void *argument)
 {
   /* USER CODE BEGIN 5 */
+	bool debounce = false;
 	/* Infinite loop */
 	 for(;;)
 	 {
-		 printf("Heartbeat Alive");
-		 osDelay(10000);
+		 if(!HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin))
+		 {
+			 debounce = true;
+			 osDelay(150);
+		 }else if(debounce)
+		 {
+			 debounce = false;
+			 enable_autonomy = !enable_autonomy;
+			 printf("Button pressed, new autonomy state %d!", enable_autonomy);
+		 }
 	 }
   /* USER CODE END 5 */
 }
@@ -804,17 +876,22 @@ void colourSensorReadTsk(void *argument)
 
 		red_ratio_R = ((float)red_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
 		green_ratio_R = ((float)green_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
+		//green_ratio_R = (float)(red_data_R+green_data_R+blue_data_R);
 		blue_ratio_R = ((float)blue_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
 
 		red_ratio_L = ((float)red_data_L / (float)(red_data_L+green_data_L+blue_data_L))*100;
 		green_ratio_L = ((float)green_data_L / (float)(red_data_L+green_data_L+blue_data_L))*100;
+		//green_ratio_L = (float)(red_data_L+green_data_L+blue_data_L);
 		blue_ratio_L = ((float)blue_data_L / (float)(red_data_L+green_data_L+blue_data_L))*100;
 
+		//red ratio redefinition
+		//red_ratio_R =((float)red_data_R / (float)(red_data_R+red_data_L))*100;
+		//red_ratio_L =((float)red_data_L / (float)(red_data_R+red_data_L))*100;
 
 		printf("Right Sensor=> R:%.2f G:%.2f B:%.2f\n", red_ratio_R, green_ratio_R, blue_ratio_R);
 		printf("Left Sensor=> R:%.2f G:%.2f B:%.2f\n", red_ratio_L, green_ratio_L, blue_ratio_L);
 
-	    osDelay(1000);
+	    //osDelay(25);
 	 }
   /* USER CODE END colourSensorReadTsk */
 }
@@ -829,31 +906,99 @@ void colourSensorReadTsk(void *argument)
 void wheelMotorTask(void *argument)
 {
   /* USER CODE BEGIN wheelMotorTask */
+	float buffer = 1;		//3, 6
+	uint16_t h_speed = 100; //100, 125
+	uint16_t l_speed = 75;
+	float right_adjustment = 1;
+	float left_adjustment = 0.95;
+
+
+	const float Kp = 0;
+	const float Ki = 0;
+	const float Kd = 0;
+
+	float previous_error = 0;
+	float integral = 0;
+
+	TickType_t endTick, startTick, elapsedTicks;
 	  /* Infinite loop */
 	  for(;;)
 	  {
+		if(!enable_autonomy)
+		{
+			setRightMotorDutyCycle(0);
+			setLeftMotorDutyCycle(0);
+			continue;
+		}
 		setMotorDirection(FORWARD);
-		float diff = red_ratio_R-red_ratio_L;
+		endTick = xTaskGetTickCount();
 
-		if(diff > 5){
-			//turn right
-			//htim3.Instance->CCR2=75;
-			//htim3.Instance->CCR1=150;
+		elapsedTicks = endTick - startTick;
+		uint32_t elapsedTimeMs = elapsedTicks;
+		float error = red_ratio_R-red_ratio_L;
+
+		float derivative = (error-previous_error) / (float)elapsedTimeMs/1000.0;
+		previous_error = error;
+		integral += Ki * (float)elapsedTimeMs/1000.0;
+
+		control_signal = Kp * error + Kd * derivative + Ki * integral;
+
+		startTick = xTaskGetTickCount();
+
+		// Motor Control Test
+		if(enable_motor_test)
+		{
+			// Move Forward
+			setMotorDirection(FORWARD);
+			setLeftMotorDutyCycle(h_speed*left_adjustment);
+			setRightMotorDutyCycle(h_speed*right_adjustment);
+			osDelay(1000);
+
+			setLeftMotorDutyCycle(0);
+			setRightMotorDutyCycle(0);
+			osDelay(500);
+
+			// Move Right
+			setMotorDirection(FORWARD);
+			setLeftMotorDutyCycle(h_speed);
+			setRightMotorDutyCycle(0);
+			osDelay(1900);
+
+			setLeftMotorDutyCycle(0);
+			setRightMotorDutyCycle(0);
+			osDelay(500);
+
+
+			//Move Backwards
+			setMotorDirection(BACKWARD);
+			setLeftMotorDutyCycle(h_speed);
+			setRightMotorDutyCycle(h_speed);
+			osDelay(1000);
+
+			setLeftMotorDutyCycle(0);
+			setRightMotorDutyCycle(0);
+			osDelay(500);
+
+			continue;
 
 		}
-		else if(diff<-5){
+
+		if(error > buffer){
+			//turn right
+			setLeftMotorDutyCycle(h_speed*left_adjustment);
+			setRightMotorDutyCycle(l_speed*right_adjustment);
+
+		}
+		else if(error < -buffer){
 			//turn left
-			//htim3.Instance->CCR2=150;
-			//htim3.Instance->CCR1=75;
+			setLeftMotorDutyCycle(l_speed*left_adjustment);
+			setRightMotorDutyCycle(h_speed*right_adjustment);
 		}
 		else{
-			//htim3.Instance->CCR1=75;
-			//htim3.Instance->CCR2=75;
+			setLeftMotorDutyCycle(h_speed*left_adjustment);
+			setRightMotorDutyCycle(h_speed*right_adjustment);
 		}
-		//setMotorDirection(BACKWARD);
-		//htim3.Instance->CCR1 = 75;
-		//htim3.Instance->CCR2 = 75;
-		osDelay(100);
+		//osDelay(25);
 	  }
 
   /* USER CODE END wheelMotorTask */

@@ -73,6 +73,7 @@ static const uint16_t _APDS9960_I2C_ADDRESS = 0x39<<1; //use 8-bit address
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
+I2C_HandleTypeDef hi2c2;
 I2C_HandleTypeDef hi2c3;
 
 TIM_HandleTypeDef htim1;
@@ -120,6 +121,7 @@ static void MX_TIM3_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_I2C3_Init(void);
 static void MX_TIM1_Init(void);
+static void MX_I2C2_Init(void);
 void hearbeatTaskFunc(void *argument);
 void grabberMotorTaskFunc(void *argument);
 void colourSensorReadTsk(void *argument);
@@ -150,7 +152,7 @@ float red_ratio_L = 0;
 float green_ratio_L = 0;
 float blue_ratio_L = 0;
 
-bool enable_autonomy = false;
+bool enable_autonomy = true;
 
 /* USER CODE END 0 */
 
@@ -188,6 +190,7 @@ int main(void)
   MX_I2C1_Init();
   MX_I2C3_Init();
   MX_TIM1_Init();
+  MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
 
   // Start timer for grabber servo
@@ -333,6 +336,40 @@ static void MX_I2C1_Init(void)
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
+  * @brief I2C2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C2_Init(void)
+{
+
+  /* USER CODE BEGIN I2C2_Init 0 */
+
+  /* USER CODE END I2C2_Init 0 */
+
+  /* USER CODE BEGIN I2C2_Init 1 */
+
+  /* USER CODE END I2C2_Init 1 */
+  hi2c2.Instance = I2C2;
+  hi2c2.Init.ClockSpeed = 100000;
+  hi2c2.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c2.Init.OwnAddress1 = 0;
+  hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c2.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c2.Init.OwnAddress2 = 0;
+  hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C2_Init 2 */
+
+  /* USER CODE END I2C2_Init 2 */
 
 }
 
@@ -542,7 +579,10 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, LD2_Pin|Output_4_Pin|Output_2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, Output_1_Pin|Output_3_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(Output_1_GPIO_Port, Output_1_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(Output_3_GPIO_Port, Output_3_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
@@ -557,12 +597,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : Output_1_Pin Output_3_Pin */
-  GPIO_InitStruct.Pin = Output_1_Pin|Output_3_Pin;
+  /*Configure GPIO pin : Output_1_Pin */
+  GPIO_InitStruct.Pin = Output_1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  HAL_GPIO_Init(Output_1_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : Output_4_Pin Output_2_Pin */
   GPIO_InitStruct.Pin = Output_4_Pin|Output_2_Pin;
@@ -570,6 +610,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : Output_3_Pin */
+  GPIO_InitStruct.Pin = Output_3_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
+  HAL_GPIO_Init(Output_3_GPIO_Port, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
@@ -697,6 +744,7 @@ bool colourSensorSetup(I2C_HandleTypeDef *i2cHandle)
 
 	if(ret != HAL_OK)
 	{
+		printf("Colour sensor enable FAILED");
 		return false;
 	}
 	printf("Colour Sensor has been enabled\n");
@@ -837,7 +885,7 @@ void colourSensorReadTsk(void *argument)
 		printf("Right Sensor=> R:%.2f G:%.2f B:%.2f\n", red_ratio_R, green_ratio_R, blue_ratio_R);
 		printf("Left Sensor=> R:%.2f G:%.2f B:%.2f\n", red_ratio_L, green_ratio_L, blue_ratio_L);
 
-	    osDelay(10);
+	    //osDelay(25);
 	 }
   /* USER CODE END colourSensorReadTsk */
 }
@@ -853,7 +901,8 @@ void wheelMotorTask(void *argument)
 {
   /* USER CODE BEGIN wheelMotorTask */
 	float buffer = 6;
-	uint16_t speed = 100;
+	uint16_t h_speed = 100;
+	uint16_t l_speed = 50;
 	  /* Infinite loop */
 	  for(;;)
 	  {
@@ -868,19 +917,20 @@ void wheelMotorTask(void *argument)
 
 		if(diff > buffer){
 			//turn right
-			setLeftMotorDutyCycle(speed*0.95);
-			setRightMotorDutyCycle(0);
+			setLeftMotorDutyCycle(h_speed);
+			setRightMotorDutyCycle(l_speed);
 
 		}
 		else if(diff < -buffer){
 			//turn left
-			setLeftMotorDutyCycle(0);
-			setRightMotorDutyCycle(speed);
+			setLeftMotorDutyCycle(l_speed);
+			setRightMotorDutyCycle(h_speed);
 		}
 		else{
-			setLeftMotorDutyCycle(speed*0.95);
-			setRightMotorDutyCycle(speed);
+			setLeftMotorDutyCycle(h_speed);
+			setRightMotorDutyCycle(h_speed);
 		}
+		//osDelay(25);
 	  }
 
   /* USER CODE END wheelMotorTask */

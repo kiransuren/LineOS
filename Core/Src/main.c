@@ -900,8 +900,8 @@ void colourSensorReadTsk(void *argument)
 void wheelMotorTask(void *argument)
 {
   /* USER CODE BEGIN wheelMotorTask */
-	float buffer = 6;
-	uint16_t h_speed = 100;
+	float buffer = 6;		//3
+	uint16_t h_speed = 125; //100
 	uint16_t l_speed = 50;
 	  /* Infinite loop */
 	  for(;;)

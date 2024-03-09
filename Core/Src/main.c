@@ -157,7 +157,7 @@ bool enable_motor_test = false;
 
 float control_signal = 0;
 
-volatile uint32_t elapsedTimeMs =0;
+volatile uint32_t elapsedTimeMs = 0;
 
 /* USER CODE END 0 */
 
@@ -915,7 +915,7 @@ void wheelMotorTask(void *argument)
 	float left_adjustment = 1;
 
 
-	const float Kp = 1;
+	const float Kp = 10;
 	const float Ki = 0;
 	const float Kd = 0;
 
@@ -923,10 +923,13 @@ void wheelMotorTask(void *argument)
 	float integral = 0;
 
 	TickType_t endTick, startTick, elapsedTicks;
+
+	const TickType_t taskPeriod = 5;
+	TickType_t lastWakeTime = xTaskGetTickCount();
 	  /* Infinite loop */
 	  for(;;)
 	  {
-		startTick = xTaskGetTickCount();
+		  vTaskDelayUntil(&lastWakeTime, taskPeriod);
 		if(!enable_autonomy)
 		{
 			setRightMotorDutyCycle(0);
@@ -1001,10 +1004,9 @@ void wheelMotorTask(void *argument)
 			setLeftMotorDutyCycle(h_speed);
 			setRightMotorDutyCycle(h_speed);
 		}
-		elapsedTimeMs = xTaskGetTickCount();
-		elapsedTicks = endTick - startTick;
-		//elapsedTimeMs = elapsedTicks;
-		osDelay(100);
+		endTick = xTaskGetTickCount();
+		elapsedTimeMs = endTick - startTick;
+		startTick = xTaskGetTickCount();
 	  }
 
   /* USER CODE END wheelMotorTask */

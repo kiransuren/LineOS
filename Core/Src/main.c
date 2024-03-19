@@ -932,7 +932,7 @@ void wheelMotorTask(void *argument)
 	uint16_t h_speed = 0; //100, 125
 	uint16_t l_speed = 100;	//50 is lowest possible
 	float right_adjustment = 1;
-	float left_adjustment = 0.82; //0.82 for 75 speed
+	float left_adjustment = 0.7;
 
 
 	const float Kp = 0.8; //4, 10

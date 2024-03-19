@@ -659,7 +659,7 @@ void setMotorDirection(motor_direction_t direction, motor_side_t side)
 	uint8_t broken_message[] = "FIX MOTORS\r\n"; // message to send
 	if (direction == FORWARD)
 	{
-		if(side == RIGHT)
+		if(side == LEFT)
 		{
 			//Setting motor 1 to forward
 			//HAL_GPIO_WritePin(GPIOB, Output_2_Pin, GPIO_PIN_RESET);
@@ -675,7 +675,7 @@ void setMotorDirection(motor_direction_t direction, motor_side_t side)
 	}
 	else if (direction == BACKWARD)
 	{
-		if(side == RIGHT)
+		if(side == LEFT)
 		{
 			//Setting motor 1 to backward
 			HAL_GPIO_WritePin(GPIOC, Output_1_Pin, GPIO_PIN_SET);
@@ -930,14 +930,15 @@ void wheelMotorTask(void *argument)
 	float buffer = 0;		//3, 6
 	float max_pwm = 250;
 	uint16_t h_speed = 0; //100, 125
-	uint16_t l_speed = 0;	//50 is lowest possible
+	uint16_t l_speed = 75;	//50 is lowest possible
 	float right_adjustment = 1;
 	float left_adjustment = 0.82; //0.82 for 75 speed
 
 
-	const float Kp = 10; //4
+	const float Kp = 4; //4, 10
 	const float Ki = 0; //0
 	const float Kd = 0; //0
+	const float error_max = 40; //30
 
 	float previous_error = 0;
 	float integral = 0;
@@ -963,7 +964,7 @@ void wheelMotorTask(void *argument)
 		error_signal = error;
 
 		float derivative = -(error-previous_error) / (float)taskPeriod;
-		integral += ((error+previous_error)/2) * taskPeriod; // trapezoidal estimation
+		//integral += ((error+previous_error)/2) * taskPeriod; // trapezoidal estimation
 
 		previous_error = error;
 		p_term = Kp * error;
@@ -992,15 +993,15 @@ void wheelMotorTask(void *argument)
 			//leftMotorDuty = h_speed*control_signal;
 			//rightMotorDuty = h_speed-(h_speed*control_signal);
 			setMotorDirection(FORWARD, LEFT);
-			rightMotorDuty = 0; //control_signal;
-			if(error > 30)
+			rightMotorDuty = l_speed; //control_signal;
+			if(error > error_max)
 			{
-				rightMotorDuty = control_signal; //control_signal;
+				rightMotorDuty = control_signal+l_speed; //control_signal;
 				setMotorDirection(BACKWARD, RIGHT);
 			}else{
 				setMotorDirection(FORWARD, RIGHT);
 			}
-			leftMotorDuty = control_signal; //buffer;
+			leftMotorDuty = control_signal+l_speed; //buffer;
 		}
 		else if (control_signal < 0)
 		{
@@ -1008,15 +1009,15 @@ void wheelMotorTask(void *argument)
 			//leftMotorDuty = h_speed-(h_speed*-control_signal);
 			//rightMotorDuty = h_speed*-control_signal;
 			setMotorDirection(FORWARD, RIGHT);
-			leftMotorDuty = 0;
-			if(error < -30)
+			leftMotorDuty = l_speed;
+			if(error < -error_max)
 			{
 				setMotorDirection(BACKWARD, LEFT);
-				leftMotorDuty = -control_signal;
+				leftMotorDuty = -control_signal+l_speed;
 			}else{
 				setMotorDirection(FORWARD, LEFT);
 			}
-			rightMotorDuty = -control_signal;
+			rightMotorDuty = -control_signal+l_speed;
 		}
 		else{
 			leftMotorDuty = h_speed;

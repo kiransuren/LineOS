@@ -930,7 +930,7 @@ void wheelMotorTask(void *argument)
 	float buffer = 0;		//3, 6
 	float max_pwm = 250;
 	uint16_t h_speed = 0; //100, 125
-	uint16_t l_speed = 100;	//50 is lowest possible
+	uint16_t l_speed = 125;	//50 is lowest possible
 	float right_adjustment = 1;
 	float left_adjustment = 0.7;
 

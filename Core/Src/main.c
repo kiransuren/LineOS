@@ -659,7 +659,7 @@ void setMotorDirection(motor_direction_t direction, motor_side_t side)
 	uint8_t broken_message[] = "FIX MOTORS\r\n"; // message to send
 	if (direction == FORWARD)
 	{
-		if(side == LEFT)
+		if(side == RIGHT)
 		{
 			//Setting motor 1 to forward
 			//HAL_GPIO_WritePin(GPIOB, Output_2_Pin, GPIO_PIN_RESET);
@@ -675,7 +675,7 @@ void setMotorDirection(motor_direction_t direction, motor_side_t side)
 	}
 	else if (direction == BACKWARD)
 	{
-		if(side == LEFT)
+		if(side == RIGHT)
 		{
 			//Setting motor 1 to backward
 			HAL_GPIO_WritePin(GPIOC, Output_1_Pin, GPIO_PIN_SET);
@@ -736,7 +736,7 @@ bool colourSensorSetup(I2C_HandleTypeDef *i2cHandle)
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
 	buf[0] = _APDS9960_ATIME;
-	buf[1] = 175;
+	buf[1] = 255;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
 	buf[0] = _APDS9960_CONTROL;
 	buf[1] = 3;
@@ -902,8 +902,8 @@ void colourSensorReadTsk(void *argument)
 	{
 		vTaskDelayUntil(&lastWakeTime, taskPeriod);
 		// read from sensors
-		colourSensorRead(&hi2c1, &red_data_R, &green_data_R, &blue_data_R, &clear_data_R);
-		colourSensorRead(&hi2c3, &red_data_L, &green_data_L, &blue_data_L, &clear_data_L);
+		colourSensorRead(&hi2c3, &red_data_R, &green_data_R, &blue_data_R, &clear_data_R);
+		colourSensorRead(&hi2c1, &red_data_L, &green_data_L, &blue_data_L, &clear_data_L);
 
 		// calibrate left sensor
 		red_data_L += red_calib_L;
@@ -930,15 +930,15 @@ void wheelMotorTask(void *argument)
 	float buffer = 0;		//3, 6
 	float max_pwm = 250;
 	uint16_t h_speed = 0; //100, 125
-	uint16_t l_speed = 125;	//50 is lowest possible
+	uint16_t l_speed = 150;	// (200) 50 is lowest possible
 	float right_adjustment = 1;
-	float left_adjustment = 0.7;
+	float left_adjustment = 0.95; //0.6 for higher speeds?
 
 
-	const float Kp = 0.8; //4, 10
+	const float Kp = 4; //4, 6, 10
 	const float Ki = 0; //0
 	const float Kd = 0; //0
-	const float error_max = 30; //30
+	const float error_max = 15; //30
 
 	float previous_error = 0;
 	float integral = 0;

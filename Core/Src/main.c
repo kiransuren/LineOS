@@ -659,7 +659,7 @@ void setMotorDirection(motor_direction_t direction, motor_side_t side)
 	uint8_t broken_message[] = "FIX MOTORS\r\n"; // message to send
 	if (direction == FORWARD)
 	{
-		if(side == RIGHT)
+		if(side == LEFT)
 		{
 			//Setting motor 1 to forward
 			//HAL_GPIO_WritePin(GPIOB, Output_2_Pin, GPIO_PIN_RESET);
@@ -675,7 +675,7 @@ void setMotorDirection(motor_direction_t direction, motor_side_t side)
 	}
 	else if (direction == BACKWARD)
 	{
-		if(side == RIGHT)
+		if(side == LEFT)
 		{
 			//Setting motor 1 to backward
 			HAL_GPIO_WritePin(GPIOC, Output_1_Pin, GPIO_PIN_SET);
@@ -930,15 +930,15 @@ void wheelMotorTask(void *argument)
 	float buffer = 0;		//3, 6
 	float max_pwm = 245;
 	uint16_t h_speed = 0; //100, 125
-	uint16_t l_speed = 200;	// (200) 50 is lowest possible
+	uint16_t l_speed = 225;	// (200) 50 is lowest possible
 	float right_adjustment = 1;
-	float left_adjustment =0.95; //0.6 for higher speeds?
+	float left_adjustment =1; //0.6 for higher speeds?
 
 
-	const float Kp = 30; //4, 6, 10 30
+	const float Kp = 6; //4, 6, 10 30
 	const float Ki = 0; //0
 	const float Kd = 0; //0
-	const float error_max = 15; //30
+	const float error_max = 23; //30
 
 	float previous_error = 0;
 	float integral = 0;
@@ -947,17 +947,12 @@ void wheelMotorTask(void *argument)
 	setMotorDirection(FORWARD, RIGHT);
 
 	const TickType_t taskPeriod = 1;
-	TickType_t lastWakeTime = xTaskGetTickCount();
+	TickType_t lastWakeTime;
 	  /* Infinite loop */
 	  for(;;)
 	  {
 		//vTaskDelayUntil(&lastWakeTime, taskPeriod);
-		if(!enable_autonomy)
-		{
-			setRightMotorDutyCycle(0);
-			setLeftMotorDutyCycle(0);
-			continue;
-		}
+		osDelay(3);
 
 		// Motor Control Test
 		if(enable_motor_test)
@@ -968,21 +963,20 @@ void wheelMotorTask(void *argument)
 			setLeftMotorDutyCycle((uint16_t)(l_speed*left_adjustment));
 			setRightMotorDutyCycle((uint16_t)(l_speed*right_adjustment));
 			continue;
-
 		}
 
 		float error = red_ratio_R-red_ratio_L;
 		error_signal = error;
 
-		float derivative = -(error-previous_error) / (float)taskPeriod;
+		float derivative = -(error-previous_error) / 3;
 		//integral += ((error+previous_error)/2) * taskPeriod; // trapezoidal estimation
 
 		previous_error = error;
 		p_term = Kp * error;
-		d_term = derivative;
+		d_term = Kd * derivative;
 		i_term = Ki * integral;
 
-		control_signal = Kp * error + Kd * derivative + Ki * integral;
+		control_signal = Kp * error + Kd * derivative; // + Ki * integral;
 
 		//control_signal=0;
 		//error = 0;
@@ -1026,6 +1020,12 @@ void wheelMotorTask(void *argument)
 			rightMotorDuty = l_speed;
 		}
 
+		if(!enable_autonomy)
+		{
+			setRightMotorDutyCycle(0);
+			setLeftMotorDutyCycle(0);
+			continue;
+		}
 		setLeftMotorDutyCycle((uint16_t)(leftMotorDuty));
 		setRightMotorDutyCycle((uint16_t)(rightMotorDuty));
 

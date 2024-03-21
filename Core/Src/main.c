@@ -928,11 +928,11 @@ void wheelMotorTask(void *argument)
 {
   /* USER CODE BEGIN wheelMotorTask */
 	float buffer = 0;		//3, 6
-	float max_pwm = 250;
+	float max_pwm = 245;
 	uint16_t h_speed = 0; //100, 125
-	uint16_t l_speed = 250;	// (200) 50 is lowest possible
+	uint16_t l_speed = 200;	// (200) 50 is lowest possible
 	float right_adjustment = 1;
-	float left_adjustment = 0.9; //0.6 for higher speeds?
+	float left_adjustment =0.95; //0.6 for higher speeds?
 
 
 	const float Kp = 30; //4, 6, 10 30
@@ -959,6 +959,17 @@ void wheelMotorTask(void *argument)
 			continue;
 		}
 
+		// Motor Control Test
+		if(enable_motor_test)
+		{
+			// Move Forward
+			setMotorDirection(FORWARD, LEFT);
+			setMotorDirection(FORWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(l_speed*left_adjustment));
+			setRightMotorDutyCycle((uint16_t)(l_speed*right_adjustment));
+			continue;
+
+		}
 
 		float error = red_ratio_R-red_ratio_L;
 		error_signal = error;
@@ -973,59 +984,50 @@ void wheelMotorTask(void *argument)
 
 		control_signal = Kp * error + Kd * derivative + Ki * integral;
 
-		// Motor Control Test
-		if(enable_motor_test)
-		{
-			// Move Forward
-			setMotorDirection(FORWARD, LEFT);
-			setMotorDirection(FORWARD, RIGHT);
-			setLeftMotorDutyCycle(l_speed);
-			setRightMotorDutyCycle(l_speed);
-			//osDelay(1000);
-			continue;
-
-		}
 		//control_signal=0;
+		//error = 0;
 
 		if(control_signal > 0)
 		{
-			//turn right
-			//leftMotorDuty = h_speed*control_signal;
-			//rightMotorDuty = h_speed-(h_speed*control_signal);
+			//turn right -> left motor should be powered more
 			setMotorDirection(FORWARD, LEFT);
-			rightMotorDuty = l_speed; //control_signal;
+			leftMotorDuty = control_signal+l_speed*left_adjustment;
+			rightMotorDuty = l_speed;
+
+			// check if ultra mode required
 			if(error > error_max)
 			{
-				rightMotorDuty = control_signal+l_speed; //control_signal;
+				// enter ultra mode
+				//rightMotorDuty = control_signal+l_speed; //control_signal;
 				setMotorDirection(BACKWARD, RIGHT);
 			}else{
 				setMotorDirection(FORWARD, RIGHT);
 			}
-			leftMotorDuty = control_signal+l_speed; //buffer;
 		}
 		else if (control_signal < 0)
 		{
-			//turn left
-			//leftMotorDuty = h_speed-(h_speed*-control_signal);
-			//rightMotorDuty = h_speed*-control_signal;
+			//turn left -> right motor should be powered more
 			setMotorDirection(FORWARD, RIGHT);
-			leftMotorDuty = l_speed;
+			rightMotorDuty = -control_signal+l_speed;
+			leftMotorDuty = l_speed*left_adjustment;
+
+			// check if ultra mode required
 			if(error < -error_max)
 			{
+				// enter ultra mode
 				setMotorDirection(BACKWARD, LEFT);
-				leftMotorDuty = -control_signal+l_speed;
+				//leftMotorDuty = -control_signal+l_speed;
 			}else{
 				setMotorDirection(FORWARD, LEFT);
 			}
-			rightMotorDuty = -control_signal+l_speed;
 		}
 		else{
-			leftMotorDuty = h_speed;
-			rightMotorDuty = h_speed;
+			leftMotorDuty = l_speed;
+			rightMotorDuty = l_speed;
 		}
 
-		setLeftMotorDutyCycle(leftMotorDuty*left_adjustment);
-		setRightMotorDutyCycle(rightMotorDuty);
+		setLeftMotorDutyCycle((uint16_t)(leftMotorDuty));
+		setRightMotorDutyCycle((uint16_t)(rightMotorDuty));
 
 	  }
 

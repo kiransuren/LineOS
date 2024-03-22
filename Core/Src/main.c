@@ -163,10 +163,16 @@ uint16_t clear_data_L = 0;
 uint16_t red_data_L = 0;
 uint16_t green_data_L = 0;
 uint16_t blue_data_L = 0;
+
 uint16_t clear_data_R = 0;
 uint16_t red_data_R = 0;
 uint16_t green_data_R = 0;
 uint16_t blue_data_R = 0;
+
+uint16_t clear_data_C = 0;
+uint16_t red_data_C = 0;
+uint16_t green_data_C = 0;
+uint16_t blue_data_C = 0;
 
 volatile uint32_t elapsedTimeMs = 0;
 
@@ -885,15 +891,10 @@ void colourSensorReadTsk(void *argument)
 
 	// setup i2C interfaces
 	colourSensorSetup(&hi2c3);
+	colourSensorSetup(&hi2c2);
 	colourSensorSetup(&hi2c1);
 
 	// define buffer variables
-	// NOTE: Moved to global variables
-
-	// define calibration values for wavelengths
-	uint16_t red_calib_L = 0;
-	uint16_t green_calib_L = 0;
-	uint16_t blue_calib_L = 0;
 
 	const TickType_t taskPeriod = 2;
 	TickType_t lastWakeTime = xTaskGetTickCount();
@@ -901,14 +902,11 @@ void colourSensorReadTsk(void *argument)
 	for(;;)
 	{
 		vTaskDelayUntil(&lastWakeTime, taskPeriod);
-		// read from sensors
+		// read from side sensors
 		colourSensorRead(&hi2c3, &red_data_R, &green_data_R, &blue_data_R, &clear_data_R);
 		colourSensorRead(&hi2c1, &red_data_L, &green_data_L, &blue_data_L, &clear_data_L);
 
-		// calibrate left sensor
-		red_data_L += red_calib_L;
-		green_data_L += green_calib_L;
-		blue_data_L += blue_calib_L;
+		colourSensorRead(&hi2c2, &red_data_C, &green_data_C, &blue_data_C, &clear_data_C);
 
 		// Calculate ratio of red wavelength to total wavelength strength
 		red_ratio_R = ((float)red_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
@@ -934,6 +932,7 @@ void wheelMotorTask(void *argument)
 	float right_adjustment = 1;
 	float left_adjustment =1; //0.6 for higher speeds?
 
+	const uint16_t target_max_blue = 250;
 
 	const float Kp = 6; //4, 6, 10 30
 	const float Ki = 0; //0
@@ -954,14 +953,19 @@ void wheelMotorTask(void *argument)
 		//vTaskDelayUntil(&lastWakeTime, taskPeriod);
 		osDelay(3);
 
+		if(blue_data_C > target_max_blue)
+		{
+			enable_autonomy = false;
+		}
+
 		// Motor Control Test
-		if(enable_motor_test)
+		if(enable_motor_test && enable_autonomy)
 		{
 			// Move Forward
-			setMotorDirection(FORWARD, LEFT);
-			setMotorDirection(FORWARD, RIGHT);
-			setLeftMotorDutyCycle((uint16_t)(l_speed*left_adjustment));
-			setRightMotorDutyCycle((uint16_t)(l_speed*right_adjustment));
+			setMotorDirection(BACKWARD, LEFT);
+			setMotorDirection(BACKWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(l_speed));
+			setRightMotorDutyCycle((uint16_t)(l_speed));
 			continue;
 		}
 
@@ -976,7 +980,7 @@ void wheelMotorTask(void *argument)
 		d_term = Kd * derivative;
 		i_term = Ki * integral;
 
-		control_signal = Kp * error + Kd * derivative; // + Ki * integral;
+		control_signal = Kp * error; //+ Kd * derivative; // + Ki * integral;
 
 		//control_signal=0;
 		//error = 0;
@@ -985,7 +989,7 @@ void wheelMotorTask(void *argument)
 		{
 			//turn right -> left motor should be powered more
 			setMotorDirection(FORWARD, LEFT);
-			leftMotorDuty = control_signal+l_speed*left_adjustment;
+			leftMotorDuty = l_speed+control_signal;
 			rightMotorDuty = l_speed;
 
 			// check if ultra mode required
@@ -1002,8 +1006,8 @@ void wheelMotorTask(void *argument)
 		{
 			//turn left -> right motor should be powered more
 			setMotorDirection(FORWARD, RIGHT);
-			rightMotorDuty = -control_signal+l_speed;
-			leftMotorDuty = l_speed*left_adjustment;
+			rightMotorDuty = l_speed-control_signal;
+			leftMotorDuty = l_speed;
 
 			// check if ultra mode required
 			if(error < -error_max)

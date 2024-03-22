@@ -657,24 +657,20 @@ typedef enum {
 
 void setMotorDirection(motor_direction_t direction, motor_side_t side)
 {
-	// Resetting all
-	HAL_GPIO_WritePin(GPIOC, Output_1_Pin, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOA, Output_2_Pin, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOB, Output_3_Pin, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOA, Output_4_Pin, GPIO_PIN_RESET);
-	uint8_t broken_message[] = "FIX MOTORS\r\n"; // message to send
 	if (direction == FORWARD)
 	{
 		if(side == LEFT)
 		{
 			//Setting motor 1 to forward
 			//HAL_GPIO_WritePin(GPIOB, Output_2_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOC, Output_1_Pin, GPIO_PIN_RESET);
 			HAL_GPIO_WritePin(GPIOA, Output_2_Pin, GPIO_PIN_SET);
 		}
 		else
 		{
 			//Setting motor 2 to forward
 			//HAL_GPIO_WritePin(GPIOB, Output_4_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOB, Output_3_Pin, GPIO_PIN_RESET);
 			HAL_GPIO_WritePin(GPIOA, Output_4_Pin, GPIO_PIN_SET);
 		}
 
@@ -684,17 +680,15 @@ void setMotorDirection(motor_direction_t direction, motor_side_t side)
 		if(side == LEFT)
 		{
 			//Setting motor 1 to backward
+			HAL_GPIO_WritePin(GPIOA, Output_2_Pin, GPIO_PIN_RESET);
 			HAL_GPIO_WritePin(GPIOC, Output_1_Pin, GPIO_PIN_SET);
 		}
 		else
 		{
 			//Setting motor 2 to backward
+			HAL_GPIO_WritePin(GPIOA, Output_4_Pin, GPIO_PIN_RESET);
 			HAL_GPIO_WritePin(GPIOB, Output_3_Pin, GPIO_PIN_SET);
 		}
-	}
-	else
-	{
-		HAL_UART_Transmit(&huart2,broken_message,sizeof(broken_message),10);
 	}
 }
 
@@ -934,10 +928,10 @@ void wheelMotorTask(void *argument)
 
 	const uint16_t target_max_blue = 250;
 
-	const float Kp = 6; //4, 6, 10 30
+	const float Kp = 30; //4, 6, 10 30
 	const float Ki = 0; //0
 	const float Kd = 0; //0
-	const float error_max = 23; //30
+	const float error_max = 15; //30
 
 	float previous_error = 0;
 	float integral = 0;
@@ -950,7 +944,6 @@ void wheelMotorTask(void *argument)
 	  /* Infinite loop */
 	  for(;;)
 	  {
-		//vTaskDelayUntil(&lastWakeTime, taskPeriod);
 		osDelay(3);
 
 		if(blue_data_C > target_max_blue)
@@ -1020,6 +1013,8 @@ void wheelMotorTask(void *argument)
 			}
 		}
 		else{
+			setMotorDirection(FORWARD, RIGHT);
+			setMotorDirection(FORWARD, LEFT);
 			leftMotorDuty = l_speed;
 			rightMotorDuty = l_speed;
 		}

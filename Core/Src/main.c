@@ -153,6 +153,7 @@ float d_term = 0;
 
 bool enable_autonomy = false;
 bool enable_motor_test = false;
+bool enable_pivot_test = true;
 
 float control_signal = 0;
 float error_signal = 0;
@@ -659,17 +660,15 @@ void setMotorDirection(motor_direction_t direction, motor_side_t side)
 {
 	if (direction == FORWARD)
 	{
-		if(side == LEFT)
+		if(side == RIGHT)
 		{
 			//Setting motor 1 to forward
-			//HAL_GPIO_WritePin(GPIOB, Output_2_Pin, GPIO_PIN_RESET);
 			HAL_GPIO_WritePin(GPIOC, Output_1_Pin, GPIO_PIN_RESET);
 			HAL_GPIO_WritePin(GPIOA, Output_2_Pin, GPIO_PIN_SET);
 		}
 		else
 		{
 			//Setting motor 2 to forward
-			//HAL_GPIO_WritePin(GPIOB, Output_4_Pin, GPIO_PIN_RESET);
 			HAL_GPIO_WritePin(GPIOB, Output_3_Pin, GPIO_PIN_RESET);
 			HAL_GPIO_WritePin(GPIOA, Output_4_Pin, GPIO_PIN_SET);
 		}
@@ -677,7 +676,7 @@ void setMotorDirection(motor_direction_t direction, motor_side_t side)
 	}
 	else if (direction == BACKWARD)
 	{
-		if(side == LEFT)
+		if(side == RIGHT)
 		{
 			//Setting motor 1 to backward
 			HAL_GPIO_WritePin(GPIOA, Output_2_Pin, GPIO_PIN_RESET);
@@ -888,14 +887,10 @@ void colourSensorReadTsk(void *argument)
 	colourSensorSetup(&hi2c2);
 	colourSensorSetup(&hi2c1);
 
-	// define buffer variables
-
-	const TickType_t taskPeriod = 2;
-	TickType_t lastWakeTime = xTaskGetTickCount();
 	 /* Infinite loop */
 	for(;;)
 	{
-		vTaskDelayUntil(&lastWakeTime, taskPeriod);
+		osDelay(1);
 		// read from side sensors
 		colourSensorRead(&hi2c3, &red_data_R, &green_data_R, &blue_data_R, &clear_data_R);
 		colourSensorRead(&hi2c1, &red_data_L, &green_data_L, &blue_data_L, &clear_data_L);
@@ -922,16 +917,16 @@ void wheelMotorTask(void *argument)
 	float buffer = 0;		//3, 6
 	float max_pwm = 245;
 	uint16_t h_speed = 0; //100, 125
-	uint16_t l_speed = 225;	// (200) 50 is lowest possible
+	uint16_t l_speed = 125;	// (200) 50 is lowest possible
 	float right_adjustment = 1;
 	float left_adjustment =1; //0.6 for higher speeds?
 
 	const uint16_t target_max_blue = 250;
 
-	const float Kp = 30; //4, 6, 10 30
+	const float Kp = 6; //4, 6, 10 30
 	const float Ki = 0; //0
 	const float Kd = 0; //0
-	const float error_max = 15; //30
+	const float error_max = 30; //30
 
 	float previous_error = 0;
 	float integral = 0;
@@ -939,12 +934,18 @@ void wheelMotorTask(void *argument)
 	setMotorDirection(FORWARD, LEFT);
 	setMotorDirection(FORWARD, RIGHT);
 
-	const TickType_t taskPeriod = 1;
+	// enable pivot test
+	if(enable_pivot_test)
+	{
+		l_speed = 0;
+	}
+
+	const float taskPeriod = 1;
 	TickType_t lastWakeTime;
 	  /* Infinite loop */
 	  for(;;)
 	  {
-		osDelay(3);
+		osDelay(1);
 
 		if(blue_data_C > target_max_blue)
 		{
@@ -956,16 +957,38 @@ void wheelMotorTask(void *argument)
 		{
 			// Move Forward
 			setMotorDirection(BACKWARD, LEFT);
+			setMotorDirection(FORWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(l_speed));
+			setRightMotorDutyCycle((uint16_t)(l_speed));
+			osDelay(2000);
+
+			// Move Backward
+			setMotorDirection(BACKWARD, LEFT);
 			setMotorDirection(BACKWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(l_speed));
 			setRightMotorDutyCycle((uint16_t)(l_speed));
+			osDelay(2000);
+
+			// Turn Left
+			setMotorDirection(BACKWARD, LEFT);
+			setMotorDirection(FORWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(l_speed));
+			setRightMotorDutyCycle((uint16_t)(l_speed));
+			osDelay(2000);
+
+			// Turn Right
+			setMotorDirection(FORWARD, LEFT);
+			setMotorDirection(BACKWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(l_speed));
+			setRightMotorDutyCycle((uint16_t)(l_speed));
+//			osDelay(2000);
 			continue;
 		}
 
 		float error = red_ratio_R-red_ratio_L;
 		error_signal = error;
 
-		float derivative = -(error-previous_error) / 3;
+		float derivative = -(error-previous_error) / taskPeriod;
 		//integral += ((error+previous_error)/2) * taskPeriod; // trapezoidal estimation
 
 		previous_error = error;
@@ -974,9 +997,6 @@ void wheelMotorTask(void *argument)
 		i_term = Ki * integral;
 
 		control_signal = Kp * error; //+ Kd * derivative; // + Ki * integral;
-
-		//control_signal=0;
-		//error = 0;
 
 		if(control_signal > 0)
 		{
@@ -999,7 +1019,7 @@ void wheelMotorTask(void *argument)
 		{
 			//turn left -> right motor should be powered more
 			setMotorDirection(FORWARD, RIGHT);
-			rightMotorDuty = l_speed-control_signal;
+			rightMotorDuty = l_speed + (uint16_t)(-control_signal);
 			leftMotorDuty = l_speed;
 
 			// check if ultra mode required

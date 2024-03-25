@@ -921,7 +921,7 @@ void wheelMotorTask(void *argument)
 	float right_adjustment = 1;
 	float left_adjustment =1; //0.6 for higher speeds?
 
-	const uint16_t target_max_blue = 250; //125
+	const uint16_t target_max_blue = 125; //125
 
 	const float Kp = 1.25; //4, 6, 10 30
 	const float Ki = 0; //0

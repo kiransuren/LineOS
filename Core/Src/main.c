@@ -153,7 +153,7 @@ float d_term = 0;
 
 bool enable_autonomy = false;
 bool enable_motor_test = false;
-bool enable_pivot_test = true;
+bool enable_pivot_test = false;
 
 float control_signal = 0;
 float error_signal = 0;
@@ -890,7 +890,7 @@ void colourSensorReadTsk(void *argument)
 	 /* Infinite loop */
 	for(;;)
 	{
-		osDelay(1);
+		//osDelay(1);
 		// read from side sensors
 		colourSensorRead(&hi2c3, &red_data_R, &green_data_R, &blue_data_R, &clear_data_R);
 		colourSensorRead(&hi2c1, &red_data_L, &green_data_L, &blue_data_L, &clear_data_L);
@@ -917,16 +917,16 @@ void wheelMotorTask(void *argument)
 	float buffer = 0;		//3, 6
 	float max_pwm = 245;
 	uint16_t h_speed = 0; //100, 125
-	uint16_t l_speed = 125;	// (200) 50 is lowest possible
+	uint16_t l_speed = 60;	// (200) 50 is lowest possible
 	float right_adjustment = 1;
 	float left_adjustment =1; //0.6 for higher speeds?
 
-	const uint16_t target_max_blue = 250;
+	const uint16_t target_max_blue = 250; //125
 
-	const float Kp = 6; //4, 6, 10 30
+	const float Kp = 1.25; //4, 6, 10 30
 	const float Ki = 0; //0
 	const float Kd = 0; //0
-	const float error_max = 30; //30
+	const float error_max = 15; //30
 
 	float previous_error = 0;
 	float integral = 0;
@@ -945,7 +945,7 @@ void wheelMotorTask(void *argument)
 	  /* Infinite loop */
 	  for(;;)
 	  {
-		osDelay(1);
+		//osDelay(1);
 
 		if(blue_data_C > target_max_blue)
 		{

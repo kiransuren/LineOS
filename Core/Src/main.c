@@ -917,13 +917,13 @@ void wheelMotorTask(void *argument)
 	float buffer = 0;		//3, 6
 	float max_pwm = 245;
 	uint16_t h_speed = 0; //100, 125
-	uint16_t l_speed = 60;	// (200) 50 is lowest possible
+	uint16_t l_speed = 80;	// (200) 50 is lowest possible
 	float right_adjustment = 1;
 	float left_adjustment =1; //0.6 for higher speeds?
 
 	const uint16_t target_max_blue = 125; //125
 
-	const float Kp = 1.25; //4, 6, 10 30
+	const float Kp = 1.5; //4, 6, 10 30
 	const float Ki = 0; //0
 	const float Kd = 0; //0
 	const float error_max = 15; //30
@@ -1009,7 +1009,7 @@ void wheelMotorTask(void *argument)
 			if(error > error_max)
 			{
 				// enter ultra mode
-				//rightMotorDuty = control_signal+l_speed; //control_signal;
+				rightMotorDuty = control_signal; //control_signal;
 				setMotorDirection(BACKWARD, RIGHT);
 			}else{
 				setMotorDirection(FORWARD, RIGHT);
@@ -1027,7 +1027,7 @@ void wheelMotorTask(void *argument)
 			{
 				// enter ultra mode
 				setMotorDirection(BACKWARD, LEFT);
-				//leftMotorDuty = -control_signal+l_speed;
+				leftMotorDuty = -control_signal;
 			}else{
 				setMotorDirection(FORWARD, LEFT);
 			}

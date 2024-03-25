@@ -890,7 +890,7 @@ void colourSensorReadTsk(void *argument)
 	 /* Infinite loop */
 	for(;;)
 	{
-		//osDelay(1);
+		osDelay(3);
 		// read from side sensors
 		colourSensorRead(&hi2c3, &red_data_R, &green_data_R, &blue_data_R, &clear_data_R);
 		colourSensorRead(&hi2c1, &red_data_L, &green_data_L, &blue_data_L, &clear_data_L);
@@ -925,7 +925,7 @@ void wheelMotorTask(void *argument)
 
 	const float Kp = 1.5; //4, 6, 10 30
 	const float Ki = 0; //0
-	const float Kd = 0; //0
+	const float Kd = 2; //0
 	const float error_max = 15; //30
 
 	float previous_error = 0;
@@ -940,12 +940,11 @@ void wheelMotorTask(void *argument)
 		l_speed = 0;
 	}
 
-	const float taskPeriod = 1;
-	TickType_t lastWakeTime;
+	const float taskPeriod = 3;
 	  /* Infinite loop */
 	  for(;;)
 	  {
-		//osDelay(1);
+		osDelay(3);
 
 		if(blue_data_C > target_max_blue)
 		{
@@ -996,7 +995,7 @@ void wheelMotorTask(void *argument)
 		d_term = Kd * derivative;
 		i_term = Ki * integral;
 
-		control_signal = Kp * error; //+ Kd * derivative; // + Ki * integral;
+		control_signal = Kp * error + Kd * derivative; // + Ki * integral;
 
 		if(control_signal > 0)
 		{
@@ -1010,6 +1009,7 @@ void wheelMotorTask(void *argument)
 			{
 				// enter ultra mode
 				rightMotorDuty = control_signal; //control_signal;
+				leftMotorDuty = l_speed*0.75+control_signal;
 				setMotorDirection(BACKWARD, RIGHT);
 			}else{
 				setMotorDirection(FORWARD, RIGHT);
@@ -1026,8 +1026,9 @@ void wheelMotorTask(void *argument)
 			if(error < -error_max)
 			{
 				// enter ultra mode
-				setMotorDirection(BACKWARD, LEFT);
+				rightMotorDuty = l_speed*0.75 + (uint16_t)(-control_signal);
 				leftMotorDuty = -control_signal;
+				setMotorDirection(BACKWARD, LEFT);
 			}else{
 				setMotorDirection(FORWARD, LEFT);
 			}

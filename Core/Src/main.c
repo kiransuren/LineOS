@@ -915,12 +915,9 @@ void colourSensorReadTsk(void *argument)
 void wheelMotorTask(void *argument)
 {
   /* USER CODE BEGIN wheelMotorTask */
-	float buffer = 0;		//3, 6
-	float max_pwm = 245;
-	uint16_t h_speed = 0; //100, 125
-	uint16_t l_speed = 80;	// (200) 50 is lowest possible
-	float right_adjustment = 1;
-	float left_adjustment =1; //0.6 for higher speeds?
+	uint16_t base_speed = 80;	// (200) 50 is lowest possible
+	uint16_t base_turn_speed = 80;
+	float turn_compensation_factor = 0.75;
 
 	const uint16_t target_max_blue = 125; //125
 
@@ -938,7 +935,7 @@ void wheelMotorTask(void *argument)
 	// enable pivot test
 	if(enable_pivot_test)
 	{
-		l_speed = 0;
+		base_speed = 0;
 	}
 
 	const float taskPeriod = 3;
@@ -955,8 +952,8 @@ void wheelMotorTask(void *argument)
 
 			setMotorDirection(FORWARD, LEFT);
 			setMotorDirection(FORWARD, RIGHT);
-			setLeftMotorDutyCycle((uint16_t)(l_speed));
-			setRightMotorDutyCycle((uint16_t)(l_speed));
+			setLeftMotorDutyCycle((uint16_t)(base_turn_speed));
+			setRightMotorDutyCycle((uint16_t)(base_turn_speed));
 			osDelay(400);
 
 			setLeftMotorDutyCycle((uint16_t)(0));
@@ -965,8 +962,8 @@ void wheelMotorTask(void *argument)
 
 			setMotorDirection(FORWARD, LEFT);
 			setMotorDirection(BACKWARD, RIGHT);
-			setLeftMotorDutyCycle((uint16_t)(l_speed));
-			setRightMotorDutyCycle((uint16_t)(l_speed));
+			setLeftMotorDutyCycle((uint16_t)(base_turn_speed));
+			setRightMotorDutyCycle((uint16_t)(base_turn_speed));
 			osDelay(1100);
 
 			setMotorDirection(FORWARD, LEFT);
@@ -983,29 +980,29 @@ void wheelMotorTask(void *argument)
 			// Move Forward
 			setMotorDirection(BACKWARD, LEFT);
 			setMotorDirection(FORWARD, RIGHT);
-			setLeftMotorDutyCycle((uint16_t)(l_speed));
-			setRightMotorDutyCycle((uint16_t)(l_speed));
+			setLeftMotorDutyCycle((uint16_t)(base_speed));
+			setRightMotorDutyCycle((uint16_t)(base_speed));
 			osDelay(2000);
 
 			// Move Backward
 			setMotorDirection(BACKWARD, LEFT);
 			setMotorDirection(BACKWARD, RIGHT);
-			setLeftMotorDutyCycle((uint16_t)(l_speed));
-			setRightMotorDutyCycle((uint16_t)(l_speed));
+			setLeftMotorDutyCycle((uint16_t)(base_speed));
+			setRightMotorDutyCycle((uint16_t)(base_speed));
 			osDelay(2000);
 
 			// Turn Left
 			setMotorDirection(BACKWARD, LEFT);
 			setMotorDirection(FORWARD, RIGHT);
-			setLeftMotorDutyCycle((uint16_t)(l_speed));
-			setRightMotorDutyCycle((uint16_t)(l_speed));
+			setLeftMotorDutyCycle((uint16_t)(base_speed));
+			setRightMotorDutyCycle((uint16_t)(base_speed));
 			osDelay(2000);
 
 			// Turn Right
 			setMotorDirection(FORWARD, LEFT);
 			setMotorDirection(BACKWARD, RIGHT);
-			setLeftMotorDutyCycle((uint16_t)(l_speed));
-			setRightMotorDutyCycle((uint16_t)(l_speed));
+			setLeftMotorDutyCycle((uint16_t)(base_speed));
+			setRightMotorDutyCycle((uint16_t)(base_speed));
 //			osDelay(2000);
 			continue;
 		}
@@ -1027,15 +1024,15 @@ void wheelMotorTask(void *argument)
 		{
 			//turn right -> left motor should be powered more
 			setMotorDirection(FORWARD, LEFT);
-			leftMotorDuty = l_speed+control_signal;
-			rightMotorDuty = l_speed;
+			leftMotorDuty = base_speed+control_signal;
+			rightMotorDuty = base_speed;
 
 			// check if ultra mode required
 			if(error > error_max)
 			{
 				// enter ultra mode
 				rightMotorDuty = control_signal; //control_signal;
-				leftMotorDuty = l_speed*0.75+control_signal;
+				leftMotorDuty = (base_turn_speed*turn_compensation_factor)+control_signal;
 				setMotorDirection(BACKWARD, RIGHT);
 			}else{
 				setMotorDirection(FORWARD, RIGHT);
@@ -1045,14 +1042,14 @@ void wheelMotorTask(void *argument)
 		{
 			//turn left -> right motor should be powered more
 			setMotorDirection(FORWARD, RIGHT);
-			rightMotorDuty = l_speed + (uint16_t)(-control_signal);
-			leftMotorDuty = l_speed;
+			rightMotorDuty = base_speed + (uint16_t)(-control_signal);
+			leftMotorDuty = base_speed;
 
 			// check if ultra mode required
 			if(error < -error_max)
 			{
 				// enter ultra mode
-				rightMotorDuty = l_speed*0.75 + (uint16_t)(-control_signal);
+				rightMotorDuty = (base_turn_speed*turn_compensation_factor) + (uint16_t)(-control_signal);
 				leftMotorDuty = -control_signal;
 				setMotorDirection(BACKWARD, LEFT);
 			}else{
@@ -1062,8 +1059,8 @@ void wheelMotorTask(void *argument)
 		else{
 			setMotorDirection(FORWARD, RIGHT);
 			setMotorDirection(FORWARD, LEFT);
-			leftMotorDuty = l_speed;
-			rightMotorDuty = l_speed;
+			leftMotorDuty = base_speed;
+			rightMotorDuty = base_speed;
 		}
 
 		if(!enable_autonomy)

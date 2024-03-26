@@ -154,6 +154,7 @@ float d_term = 0;
 bool enable_autonomy = false;
 bool enable_motor_test = false;
 bool enable_pivot_test = false;
+bool is_rescue_complete = false;
 
 float control_signal = 0;
 float error_signal = 0;
@@ -890,7 +891,7 @@ void colourSensorReadTsk(void *argument)
 	 /* Infinite loop */
 	for(;;)
 	{
-		osDelay(3);
+		//osDelay(3);
 		// read from side sensors
 		colourSensorRead(&hi2c3, &red_data_R, &green_data_R, &blue_data_R, &clear_data_R);
 		colourSensorRead(&hi2c1, &red_data_L, &green_data_L, &blue_data_L, &clear_data_L);
@@ -944,11 +945,36 @@ void wheelMotorTask(void *argument)
 	  /* Infinite loop */
 	  for(;;)
 	  {
-		osDelay(3);
+		//osDelay(3);
 
 		if(blue_data_C > target_max_blue)
 		{
-			enable_autonomy = false;
+			setLeftMotorDutyCycle((uint16_t)(0));
+			setRightMotorDutyCycle((uint16_t)(0));
+			osDelay(1000);
+
+			setMotorDirection(FORWARD, LEFT);
+			setMotorDirection(FORWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(l_speed));
+			setRightMotorDutyCycle((uint16_t)(l_speed));
+			osDelay(400);
+
+			setLeftMotorDutyCycle((uint16_t)(0));
+			setRightMotorDutyCycle((uint16_t)(0));
+			osDelay(1000);
+
+			setMotorDirection(FORWARD, LEFT);
+			setMotorDirection(BACKWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(l_speed));
+			setRightMotorDutyCycle((uint16_t)(l_speed));
+			osDelay(1100);
+
+			setMotorDirection(FORWARD, LEFT);
+			setMotorDirection(FORWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(0));
+			setRightMotorDutyCycle((uint16_t)(0));
+			osDelay(1000);
+			is_rescue_complete = true;
 		}
 
 		// Motor Control Test

@@ -145,17 +145,38 @@ PUTCHAR_PROTOTYPE
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 float red_ratio_R = 0;
-float green_ratio_R = 0;
-float blue_ratio_R = 0;
-
 float red_ratio_L = 0;
-float green_ratio_L = 0;
-float blue_ratio_L = 0;
+
+float p_term = 0;
+float i_term = 0;
+float d_term = 0;
 
 bool enable_autonomy = false;
-bool enable_motor_test = true;
+bool enable_motor_test = false;
+bool enable_pivot_test = false;
+bool is_rescue_complete = false;
 
 float control_signal = 0;
+float error_signal = 0;
+uint32_t leftMotorDuty = 0;
+uint32_t rightMotorDuty = 0;
+
+uint16_t clear_data_L = 0;
+uint16_t red_data_L = 0;
+uint16_t green_data_L = 0;
+uint16_t blue_data_L = 0;
+
+uint16_t clear_data_R = 0;
+uint16_t red_data_R = 0;
+uint16_t green_data_R = 0;
+uint16_t blue_data_R = 0;
+
+uint16_t clear_data_C = 0;
+uint16_t red_data_C = 0;
+uint16_t green_data_C = 0;
+uint16_t blue_data_C = 0;
+
+volatile uint32_t elapsedTimeMs = 0;
 
 /* USER CODE END 0 */
 
@@ -631,34 +652,43 @@ typedef enum {
     BACKWARD
 } motor_direction_t;
 
-void setMotorDirection(motor_direction_t direction)
+typedef enum {
+    LEFT,
+    RIGHT
+} motor_side_t;
+
+void setMotorDirection(motor_direction_t direction, motor_side_t side)
 {
-	// Resetting all
-	HAL_GPIO_WritePin(GPIOC, Output_1_Pin, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOA, Output_2_Pin, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOB, Output_3_Pin, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOA, Output_4_Pin, GPIO_PIN_RESET);
-	uint8_t broken_message[] = "FIX MOTORS\r\n"; // message to send
 	if (direction == FORWARD)
 	{
-		//Setting motor 1 to forward
-		//HAL_GPIO_WritePin(GPIOB, Output_2_Pin, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOA, Output_2_Pin, GPIO_PIN_SET);
+		if(side == RIGHT)
+		{
+			//Setting motor 1 to forward
+			HAL_GPIO_WritePin(GPIOC, Output_1_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOA, Output_2_Pin, GPIO_PIN_SET);
+		}
+		else
+		{
+			//Setting motor 2 to forward
+			HAL_GPIO_WritePin(GPIOB, Output_3_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOA, Output_4_Pin, GPIO_PIN_SET);
+		}
 
-		//Setting motor 2 to forward
-		//HAL_GPIO_WritePin(GPIOB, Output_4_Pin, GPIO_PIN_RESET);
-		HAL_GPIO_WritePin(GPIOA, Output_4_Pin, GPIO_PIN_SET);
 	}
 	else if (direction == BACKWARD)
 	{
-		//Setting motor 1 to backward
-		HAL_GPIO_WritePin(GPIOC, Output_1_Pin, GPIO_PIN_SET);
-		//Setting motor 2 to backward
-		HAL_GPIO_WritePin(GPIOB, Output_3_Pin, GPIO_PIN_SET);
-	}
-	else
-	{
-		HAL_UART_Transmit(&huart2,broken_message,sizeof(broken_message),10);
+		if(side == RIGHT)
+		{
+			//Setting motor 1 to backward
+			HAL_GPIO_WritePin(GPIOA, Output_2_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOC, Output_1_Pin, GPIO_PIN_SET);
+		}
+		else
+		{
+			//Setting motor 2 to backward
+			HAL_GPIO_WritePin(GPIOA, Output_4_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOB, Output_3_Pin, GPIO_PIN_SET);
+		}
 	}
 }
 
@@ -695,7 +725,7 @@ bool colourSensorSetup(I2C_HandleTypeDef *i2cHandle)
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
 	buf[0] = _APDS9960_GCONF1;
 	buf[1] = 0;
-	ret = HAL_I2C_Master_Transmit(&hi2c1, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
 	buf[0] = _APDS9960_GCONF2;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
@@ -706,7 +736,7 @@ bool colourSensorSetup(I2C_HandleTypeDef *i2cHandle)
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
 	buf[0] = _APDS9960_ATIME;
-	buf[1] = 175;
+	buf[1] = 255;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
 	buf[0] = _APDS9960_CONTROL;
 	buf[1] = 3;
@@ -730,7 +760,7 @@ bool colourSensorSetup(I2C_HandleTypeDef *i2cHandle)
 	buf[0] = _APDS9960_ENABLE;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
-	osDelay(1); //Sleeping could take at ~2-25 ms if engines were looping
+	osDelay(25); //Sleeping could take at ~2-25 ms if engines were looping
 
 	//Re-enable sensor and wait 10ms for the power on delay to finish
 	buf[0] = 0;
@@ -741,7 +771,7 @@ bool colourSensorSetup(I2C_HandleTypeDef *i2cHandle)
 	buf[1] |= _BIT_MASK_ENABLE_COLOR;
 	buf[0] = _APDS9960_ENABLE;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
-	osDelay(1);
+	osDelay(25);
 	buf[0] = 100;
 	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_ENABLE, 1, buf, 1, HAL_MAX_DELAY);
 
@@ -829,14 +859,9 @@ void grabberMotorTaskFunc(void *argument)
   /* USER CODE BEGIN grabberMotorTaskFunc */
   /* This task moves the grabber servo motor from 0degrees to 180degrees then resets to 0degrees and repeats*/
   // 50 -> 100 : 0deg to 180deg linearly
-  int i = 0;
   for(;;)
   {
-	if (i==100) {
-		i=50;
-	}
-	htim1.Instance->CCR2 = i;
-	i+=10;
+	//htim1.Instance->CCR2 = 50;
 	osDelay(200);
   }
   /* USER CODE END grabberMotorTaskFunc */
@@ -855,43 +880,22 @@ void colourSensorReadTsk(void *argument)
 
 	// setup i2C interfaces
 	colourSensorSetup(&hi2c3);
+	colourSensorSetup(&hi2c2);
 	colourSensorSetup(&hi2c1);
-
-	// define buffer variables
-	uint16_t clear_data_L = 0;
-	uint16_t red_data_L = 0;
-	uint16_t green_data_L = 0;
-	uint16_t blue_data_L = 0;
-	uint16_t clear_data_R = 0;
-	uint16_t red_data_R = 0;
-	uint16_t green_data_R = 0;
-	uint16_t blue_data_R = 0;
-
 
 	 /* Infinite loop */
 	for(;;)
 	{
+		//osDelay(3);
+		// read from side sensors
 		colourSensorRead(&hi2c3, &red_data_R, &green_data_R, &blue_data_R, &clear_data_R);
 		colourSensorRead(&hi2c1, &red_data_L, &green_data_L, &blue_data_L, &clear_data_L);
 
+		colourSensorRead(&hi2c2, &red_data_C, &green_data_C, &blue_data_C, &clear_data_C);
+
+		// Calculate ratio of red wavelength to total wavelength strength
 		red_ratio_R = ((float)red_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
-		green_ratio_R = ((float)green_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
-		//green_ratio_R = (float)(red_data_R+green_data_R+blue_data_R);
-		blue_ratio_R = ((float)blue_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
-
 		red_ratio_L = ((float)red_data_L / (float)(red_data_L+green_data_L+blue_data_L))*100;
-		green_ratio_L = ((float)green_data_L / (float)(red_data_L+green_data_L+blue_data_L))*100;
-		//green_ratio_L = (float)(red_data_L+green_data_L+blue_data_L);
-		blue_ratio_L = ((float)blue_data_L / (float)(red_data_L+green_data_L+blue_data_L))*100;
-
-		//red ratio redefinition
-		//red_ratio_R =((float)red_data_R / (float)(red_data_R+red_data_L))*100;
-		//red_ratio_L =((float)red_data_L / (float)(red_data_R+red_data_L))*100;
-
-		printf("Right Sensor=> R:%.2f G:%.2f B:%.2f\n", red_ratio_R, green_ratio_R, blue_ratio_R);
-		printf("Left Sensor=> R:%.2f G:%.2f B:%.2f\n", red_ratio_L, green_ratio_L, blue_ratio_L);
-
-	    //osDelay(25);
 	 }
   /* USER CODE END colourSensorReadTsk */
 }
@@ -906,99 +910,195 @@ void colourSensorReadTsk(void *argument)
 void wheelMotorTask(void *argument)
 {
   /* USER CODE BEGIN wheelMotorTask */
-	float buffer = 1;		//3, 6
-	uint16_t h_speed = 100; //100, 125
-	uint16_t l_speed = 75;
-	float right_adjustment = 1;
-	float left_adjustment = 0.95;
+	uint16_t base_speed = 80;	// (200) 50 is lowest possible
+	uint16_t base_turn_speed = 80;
+	uint16_t base_crawl_speed = 60;
+	uint16_t base_pivot_speed = 70;
+	float turn_compensation_factor = 0.75;
 
+	const uint16_t target_max_blue = 125; //125
 
-	const float Kp = 0;
-	const float Ki = 0;
-	const float Kd = 0;
+	const float Kp = 1.5; //4, 6, 10 30
+	const float Ki = 0; //0
+	const float Kd = 2; //0
+	const float error_max = 12; //30
 
 	float previous_error = 0;
 	float integral = 0;
 
-	TickType_t endTick, startTick, elapsedTicks;
+	const uint16_t open_pwm = 100;
+	const uint16_t closed_pwm = 50;
+
+	setMotorDirection(FORWARD, LEFT);
+	setMotorDirection(FORWARD, RIGHT);
+	setLeftMotorDutyCycle((uint16_t)(0));
+	setRightMotorDutyCycle((uint16_t)(0));
+
+	htim1.Instance->CCR2 = closed_pwm;
+
+	// enable pivot test
+	if(enable_pivot_test)
+	{
+		base_speed = 0;
+	}
+
+	const float taskPeriod = 3;
 	  /* Infinite loop */
 	  for(;;)
 	  {
+		//osDelay(3);
+
+		if((blue_data_C > target_max_blue && enable_autonomy) && !is_rescue_complete)
+		{
+			// Stop to stabilize
+			setLeftMotorDutyCycle((uint16_t)(0));
+			setRightMotorDutyCycle((uint16_t)(0));
+			setMotorDirection(FORWARD, LEFT);
+			setMotorDirection(FORWARD, RIGHT);
+			htim1.Instance->CCR2 = open_pwm;
+			osDelay(1000);
+
+			// Crawl forward
+			setMotorDirection(FORWARD, LEFT);
+			setMotorDirection(FORWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(base_crawl_speed));
+			setRightMotorDutyCycle((uint16_t)(base_crawl_speed));
+			osDelay(600);
+
+			// Stop to stabilize
+			setLeftMotorDutyCycle((uint16_t)(0));
+			setRightMotorDutyCycle((uint16_t)(0));
+			osDelay(1000);
+
+			// close grabber
+			htim1.Instance->CCR2 = closed_pwm;
+			osDelay(1000);
+
+			// Crawl forward
+			setMotorDirection(FORWARD, LEFT);
+			setMotorDirection(FORWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(base_crawl_speed));
+			setRightMotorDutyCycle((uint16_t)(base_crawl_speed));
+			osDelay(400);
+
+
+			// Pivot turn right
+			setMotorDirection(FORWARD, LEFT);
+			setMotorDirection(BACKWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(base_pivot_speed));
+			setRightMotorDutyCycle((uint16_t)(base_pivot_speed));
+			osDelay(2000);
+
+			// Stop for stabilization
+			setMotorDirection(FORWARD, LEFT);
+			setMotorDirection(FORWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(0));
+			setRightMotorDutyCycle((uint16_t)(0));
+			osDelay(1000);
+
+			// Rescue routine complete
+			is_rescue_complete = true;
+		}
+
+		// Motor Control Test
+		if(enable_motor_test && enable_autonomy)
+		{
+
+			// Move Forward
+			setMotorDirection(BACKWARD, LEFT);
+			setMotorDirection(FORWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(base_speed));
+			setRightMotorDutyCycle((uint16_t)(base_speed));
+			osDelay(2000);
+
+			// Move Backward
+			setMotorDirection(BACKWARD, LEFT);
+			setMotorDirection(BACKWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(base_speed));
+			setRightMotorDutyCycle((uint16_t)(base_speed));
+			osDelay(2000);
+
+			// Turn Left
+			setMotorDirection(BACKWARD, LEFT);
+			setMotorDirection(FORWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(base_speed));
+			setRightMotorDutyCycle((uint16_t)(base_speed));
+			osDelay(2000);
+
+			// Turn Right
+			setMotorDirection(FORWARD, LEFT);
+			setMotorDirection(BACKWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(base_speed));
+			setRightMotorDutyCycle((uint16_t)(base_speed));
+//			osDelay(2000);
+			continue;
+		}
+
+		float error = red_ratio_R-red_ratio_L;
+		error_signal = error;
+
+		float derivative = -(error-previous_error) / taskPeriod;
+		//integral += ((error+previous_error)/2) * taskPeriod; // trapezoidal estimation
+
+		previous_error = error;
+		p_term = Kp * error;
+		d_term = Kd * derivative;
+		i_term = Ki * integral;
+
+		control_signal = Kp * error + Kd * derivative; // + Ki * integral;
+
+		if(control_signal > 0)
+		{
+			//turn right -> left motor should be powered more
+			setMotorDirection(FORWARD, LEFT);
+			leftMotorDuty = base_speed+control_signal;
+			rightMotorDuty = base_speed;
+
+			// check if ultra mode required
+			if(error > error_max)
+			{
+				// enter ultra mode
+				rightMotorDuty = control_signal; //control_signal;
+				leftMotorDuty = (base_turn_speed*turn_compensation_factor)+control_signal;
+				setMotorDirection(BACKWARD, RIGHT);
+			}else{
+				setMotorDirection(FORWARD, RIGHT);
+			}
+		}
+		else if (control_signal < 0)
+		{
+			//turn left -> right motor should be powered more
+			setMotorDirection(FORWARD, RIGHT);
+			rightMotorDuty = base_speed + (uint16_t)(-control_signal);
+			leftMotorDuty = base_speed;
+
+			// check if ultra mode required
+			if(error < -error_max)
+			{
+				// enter ultra mode
+				rightMotorDuty = (base_turn_speed*turn_compensation_factor) + (uint16_t)(-control_signal);
+				leftMotorDuty = -control_signal;
+				setMotorDirection(BACKWARD, LEFT);
+			}else{
+				setMotorDirection(FORWARD, LEFT);
+			}
+		}
+		else{
+			setMotorDirection(FORWARD, RIGHT);
+			setMotorDirection(FORWARD, LEFT);
+			leftMotorDuty = base_speed;
+			rightMotorDuty = base_speed;
+		}
+
 		if(!enable_autonomy)
 		{
 			setRightMotorDutyCycle(0);
 			setLeftMotorDutyCycle(0);
 			continue;
 		}
-		setMotorDirection(FORWARD);
-		endTick = xTaskGetTickCount();
+		setLeftMotorDutyCycle((uint16_t)(leftMotorDuty));
+		setRightMotorDutyCycle((uint16_t)(rightMotorDuty));
 
-		elapsedTicks = endTick - startTick;
-		uint32_t elapsedTimeMs = elapsedTicks;
-		float error = red_ratio_R-red_ratio_L;
-
-		float derivative = (error-previous_error) / (float)elapsedTimeMs/1000.0;
-		previous_error = error;
-		integral += Ki * (float)elapsedTimeMs/1000.0;
-
-		control_signal = Kp * error + Kd * derivative + Ki * integral;
-
-		startTick = xTaskGetTickCount();
-
-		// Motor Control Test
-		if(enable_motor_test)
-		{
-			// Move Forward
-			setMotorDirection(FORWARD);
-			setLeftMotorDutyCycle(h_speed*left_adjustment);
-			setRightMotorDutyCycle(h_speed*right_adjustment);
-			osDelay(1000);
-
-			setLeftMotorDutyCycle(0);
-			setRightMotorDutyCycle(0);
-			osDelay(500);
-
-			// Move Right
-			setMotorDirection(FORWARD);
-			setLeftMotorDutyCycle(h_speed);
-			setRightMotorDutyCycle(0);
-			osDelay(1900);
-
-			setLeftMotorDutyCycle(0);
-			setRightMotorDutyCycle(0);
-			osDelay(500);
-
-
-			//Move Backwards
-			setMotorDirection(BACKWARD);
-			setLeftMotorDutyCycle(h_speed);
-			setRightMotorDutyCycle(h_speed);
-			osDelay(1000);
-
-			setLeftMotorDutyCycle(0);
-			setRightMotorDutyCycle(0);
-			osDelay(500);
-
-			continue;
-
-		}
-
-		if(error > buffer){
-			//turn right
-			setLeftMotorDutyCycle(h_speed*left_adjustment);
-			setRightMotorDutyCycle(l_speed*right_adjustment);
-
-		}
-		else if(error < -buffer){
-			//turn left
-			setLeftMotorDutyCycle(l_speed*left_adjustment);
-			setRightMotorDutyCycle(h_speed*right_adjustment);
-		}
-		else{
-			setLeftMotorDutyCycle(h_speed*left_adjustment);
-			setRightMotorDutyCycle(h_speed*right_adjustment);
-		}
-		//osDelay(25);
 	  }
 
   /* USER CODE END wheelMotorTask */

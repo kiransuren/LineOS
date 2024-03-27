@@ -725,7 +725,7 @@ bool colourSensorSetup(I2C_HandleTypeDef *i2cHandle)
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
 	buf[0] = _APDS9960_GCONF1;
 	buf[1] = 0;
-	ret = HAL_I2C_Master_Transmit(&hi2c1, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
 	buf[0] = _APDS9960_GCONF2;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
@@ -859,14 +859,9 @@ void grabberMotorTaskFunc(void *argument)
   /* USER CODE BEGIN grabberMotorTaskFunc */
   /* This task moves the grabber servo motor from 0degrees to 180degrees then resets to 0degrees and repeats*/
   // 50 -> 100 : 0deg to 180deg linearly
-  int i = 0;
   for(;;)
   {
-	if (i==100) {
-		i=50;
-	}
-	htim1.Instance->CCR2 = i;
-	i+=10;
+	htim1.Instance->CCR2 = 50;
 	osDelay(200);
   }
   /* USER CODE END grabberMotorTaskFunc */
@@ -924,7 +919,7 @@ void wheelMotorTask(void *argument)
 	const float Kp = 1.5; //4, 6, 10 30
 	const float Ki = 0; //0
 	const float Kd = 2; //0
-	const float error_max = 15; //30
+	const float error_max = 12; //30
 
 	float previous_error = 0;
 	float integral = 0;
@@ -946,31 +941,40 @@ void wheelMotorTask(void *argument)
 
 		if(blue_data_C > target_max_blue)
 		{
+			// Stop for 1s
 			setLeftMotorDutyCycle((uint16_t)(0));
 			setRightMotorDutyCycle((uint16_t)(0));
+			// open
 			osDelay(1000);
 
+			// Move forward for 400ms
 			setMotorDirection(FORWARD, LEFT);
 			setMotorDirection(FORWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(base_turn_speed));
 			setRightMotorDutyCycle((uint16_t)(base_turn_speed));
 			osDelay(400);
 
+			// Stop for 1s
 			setLeftMotorDutyCycle((uint16_t)(0));
 			setRightMotorDutyCycle((uint16_t)(0));
 			osDelay(1000);
 
+			// Pivot turn right for 1.3s
+			uint32_t red_threshold
 			setMotorDirection(FORWARD, LEFT);
 			setMotorDirection(BACKWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(base_turn_speed));
 			setRightMotorDutyCycle((uint16_t)(base_turn_speed));
-			osDelay(1100);
+			osDelay(1300);
 
+			// Stop for 1s
 			setMotorDirection(FORWARD, LEFT);
 			setMotorDirection(FORWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(0));
 			setRightMotorDutyCycle((uint16_t)(0));
 			osDelay(1000);
+
+			// Rescue routine complete
 			is_rescue_complete = true;
 		}
 

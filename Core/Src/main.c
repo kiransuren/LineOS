@@ -760,7 +760,7 @@ bool colourSensorSetup(I2C_HandleTypeDef *i2cHandle)
 	buf[0] = _APDS9960_ENABLE;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
-	osDelay(1); //Sleeping could take at ~2-25 ms if engines were looping
+	osDelay(25); //Sleeping could take at ~2-25 ms if engines were looping
 
 	//Re-enable sensor and wait 10ms for the power on delay to finish
 	buf[0] = 0;
@@ -771,7 +771,7 @@ bool colourSensorSetup(I2C_HandleTypeDef *i2cHandle)
 	buf[1] |= _BIT_MASK_ENABLE_COLOR;
 	buf[0] = _APDS9960_ENABLE;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
-	osDelay(1);
+	osDelay(25);
 	buf[0] = 100;
 	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_ENABLE, 1, buf, 1, HAL_MAX_DELAY);
 
@@ -861,7 +861,7 @@ void grabberMotorTaskFunc(void *argument)
   // 50 -> 100 : 0deg to 180deg linearly
   for(;;)
   {
-	htim1.Instance->CCR2 = 50;
+	//htim1.Instance->CCR2 = 50;
 	osDelay(200);
   }
   /* USER CODE END grabberMotorTaskFunc */
@@ -912,6 +912,8 @@ void wheelMotorTask(void *argument)
   /* USER CODE BEGIN wheelMotorTask */
 	uint16_t base_speed = 80;	// (200) 50 is lowest possible
 	uint16_t base_turn_speed = 80;
+	uint16_t base_crawl_speed = 60;
+	uint16_t base_pivot_speed = 70;
 	float turn_compensation_factor = 0.75;
 
 	const uint16_t target_max_blue = 125; //125
@@ -924,8 +926,15 @@ void wheelMotorTask(void *argument)
 	float previous_error = 0;
 	float integral = 0;
 
+	const uint16_t open_pwm = 100;
+	const uint16_t closed_pwm = 50;
+
 	setMotorDirection(FORWARD, LEFT);
 	setMotorDirection(FORWARD, RIGHT);
+	setLeftMotorDutyCycle((uint16_t)(0));
+	setRightMotorDutyCycle((uint16_t)(0));
+
+	htim1.Instance->CCR2 = closed_pwm;
 
 	// enable pivot test
 	if(enable_pivot_test)
@@ -939,35 +948,48 @@ void wheelMotorTask(void *argument)
 	  {
 		//osDelay(3);
 
-		if(blue_data_C > target_max_blue)
+		if((blue_data_C > target_max_blue && enable_autonomy) && !is_rescue_complete)
 		{
-			// Stop for 1s
+			// Stop to stabilize
 			setLeftMotorDutyCycle((uint16_t)(0));
 			setRightMotorDutyCycle((uint16_t)(0));
-			// open
-			osDelay(1000);
-
-			// Move forward for 400ms
 			setMotorDirection(FORWARD, LEFT);
 			setMotorDirection(FORWARD, RIGHT);
-			setLeftMotorDutyCycle((uint16_t)(base_turn_speed));
-			setRightMotorDutyCycle((uint16_t)(base_turn_speed));
-			osDelay(400);
+			htim1.Instance->CCR2 = open_pwm;
+			osDelay(1000);
 
-			// Stop for 1s
+			// Crawl forward
+			setMotorDirection(FORWARD, LEFT);
+			setMotorDirection(FORWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(base_crawl_speed));
+			setRightMotorDutyCycle((uint16_t)(base_crawl_speed));
+			osDelay(600);
+
+			// Stop to stabilize
 			setLeftMotorDutyCycle((uint16_t)(0));
 			setRightMotorDutyCycle((uint16_t)(0));
 			osDelay(1000);
 
-			// Pivot turn right for 1.3s
-			uint32_t red_threshold
+			// close grabber
+			htim1.Instance->CCR2 = closed_pwm;
+			osDelay(1000);
+
+			// Crawl forward
+			setMotorDirection(FORWARD, LEFT);
+			setMotorDirection(FORWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(base_crawl_speed));
+			setRightMotorDutyCycle((uint16_t)(base_crawl_speed));
+			osDelay(400);
+
+
+			// Pivot turn right
 			setMotorDirection(FORWARD, LEFT);
 			setMotorDirection(BACKWARD, RIGHT);
-			setLeftMotorDutyCycle((uint16_t)(base_turn_speed));
-			setRightMotorDutyCycle((uint16_t)(base_turn_speed));
-			osDelay(1300);
+			setLeftMotorDutyCycle((uint16_t)(base_pivot_speed));
+			setRightMotorDutyCycle((uint16_t)(base_pivot_speed));
+			osDelay(2000);
 
-			// Stop for 1s
+			// Stop for stabilization
 			setMotorDirection(FORWARD, LEFT);
 			setMotorDirection(FORWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(0));
@@ -981,6 +1003,7 @@ void wheelMotorTask(void *argument)
 		// Motor Control Test
 		if(enable_motor_test && enable_autonomy)
 		{
+
 			// Move Forward
 			setMotorDirection(BACKWARD, LEFT);
 			setMotorDirection(FORWARD, RIGHT);

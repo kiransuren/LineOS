@@ -59,11 +59,20 @@ static const uint16_t _APDS9960_I2C_ADDRESS = 0x39<<1; //use 8-bit address
 #define _APDS9960_GSTATUS 0xAF
 #define _APDS9960_AICLEAR 0xE7
 #define _APDS9960_GFIFO_U 0xFC
-
 #define _BIT_MASK_GCONF4_GFIFO_CLR 0x04
 #define _BIT_MASK_ENABLE_EN 0x01
 #define _BIT_MASK_ENABLE_COLOR 0x02
 #define _BIT_MASK_STATUS_AVALID 0x01
+
+static const uint16_t _MPU6050_I2C_ADDRESS = 0x68<<1;  //use 8-bit address
+#define _MPU6050_ACCEL_XOUTH 0x3B
+#define _MPU6050_ACCEL_YOUTH 0x3D
+#define _MPU6050_ACCEL_ZOUTH 0x3F
+
+#define _MPU6050_GYRO_XOUTH 0x43
+#define _MPU6050_GYRO_YOUTH 0x45
+#define _MPU6050_GYRO_ZOUTH 0x47
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -175,6 +184,14 @@ uint16_t clear_data_C = 0;
 uint16_t red_data_C = 0;
 uint16_t green_data_C = 0;
 uint16_t blue_data_C = 0;
+
+uint16_t accel_x = 0;
+uint16_t accel_y = 0;
+uint16_t accel_z = 0;
+
+uint16_t gyro_x = 0;
+uint16_t gyro_y = 0;
+uint16_t gyro_z = 0;
 
 volatile uint32_t elapsedTimeMs = 0;
 
@@ -815,6 +832,83 @@ int colourSensorRead(I2C_HandleTypeDef *i2cHandle, uint16_t* red, uint16_t* gree
 	return ret;
 }
 
+
+bool IMUSensorSetup(I2C_HandleTypeDef *i2cHandle)
+{
+	printf("IMU Sensor Setup BEGIN\n");
+	HAL_StatusTypeDef ret = HAL_OK;
+	uint8_t buf[2];
+
+	// trigger sensor reset
+	buf[0] = 0x6B;
+	buf[1] = 0;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _MPU6050_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+
+	// Configure Accelerometer Sensitivity - Full Scale Range (default +/- 2g)
+	buf[0] = 0x1C;
+	buf[1] = 0x10;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _MPU6050_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+
+	// Configure Gyro Sensitivity - Full Scale Range (default +/- 250deg/s)
+	buf[0] = 0x1B;
+	buf[1] = 0x10;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _MPU6050_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+
+	if(ret != HAL_OK)
+	{
+		printf("IMU sensor enable FAILED");
+		return false;
+	}
+	printf("IMU Sensor has been enabled\n");
+	return true;
+}
+
+int readAccelValues(I2C_HandleTypeDef *i2cHandle, uint16_t* x, uint16_t* y, uint16_t* z)
+{
+
+	int ret = 0;
+	uint8_t buf[2];
+
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(i2cHandle, _MPU6050_I2C_ADDRESS, _MPU6050_ACCEL_XOUTH, 1, buf, 2, HAL_MAX_DELAY);
+	*x = buf[0] << 8 | buf[1];
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(i2cHandle, _MPU6050_I2C_ADDRESS, _MPU6050_ACCEL_YOUTH, 1, buf, 2, HAL_MAX_DELAY);
+	*y = buf[0] << 8 | buf[1];
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(i2cHandle, _MPU6050_I2C_ADDRESS, _MPU6050_ACCEL_ZOUTH, 1, buf, 2, HAL_MAX_DELAY);
+	*z = buf[0] << 8 | buf[1];
+
+	return ret;
+}
+
+int readGyroValues(I2C_HandleTypeDef *i2cHandle, uint16_t* x, uint16_t* y, uint16_t* z)
+{
+
+	int ret = 0;
+	uint8_t buf[2];
+
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(i2cHandle, _MPU6050_I2C_ADDRESS, _MPU6050_GYRO_XOUTH, 1, buf, 2, HAL_MAX_DELAY);
+	*x = buf[0] << 8 | buf[1];
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(i2cHandle, _MPU6050_I2C_ADDRESS, _MPU6050_GYRO_YOUTH, 1, buf, 2, HAL_MAX_DELAY);
+	*y = buf[0] << 8 | buf[1];
+	buf[0] = 0;
+	buf[1] = 0;
+	ret = HAL_I2C_Mem_Read(i2cHandle, _MPU6050_I2C_ADDRESS, _MPU6050_GYRO_ZOUTH, 1, buf, 2, HAL_MAX_DELAY);
+	*z = buf[0] << 8 | buf[1];
+
+	return ret;
+}
+
+
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_hearbeatTaskFunc */
@@ -882,6 +976,7 @@ void colourSensorReadTsk(void *argument)
 	colourSensorSetup(&hi2c3);
 	colourSensorSetup(&hi2c2);
 	colourSensorSetup(&hi2c1);
+	IMUSensorSetup(&hi2c1);
 
 	 /* Infinite loop */
 	for(;;)
@@ -892,6 +987,10 @@ void colourSensorReadTsk(void *argument)
 		colourSensorRead(&hi2c1, &red_data_L, &green_data_L, &blue_data_L, &clear_data_L);
 
 		colourSensorRead(&hi2c2, &red_data_C, &green_data_C, &blue_data_C, &clear_data_C);
+
+		// read IMU
+		readAccelValues(&hi2c1, &accel_x, &accel_y, &accel_z);
+		readGyroValues(&hi2c1, &gyro_x, &gyro_y, &gyro_z);
 
 		// Calculate ratio of red wavelength to total wavelength strength
 		red_ratio_R = ((float)red_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;

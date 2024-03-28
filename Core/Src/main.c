@@ -187,13 +187,17 @@ uint16_t red_data_C = 0;
 uint16_t green_data_C = 0;
 uint16_t blue_data_C = 0;
 
-uint16_t accel_x = 0;
-uint16_t accel_y = 0;
-uint16_t accel_z = 0;
+float accel_x = 0;
+float accel_y = 0;
+float accel_z = 0;
 
-uint16_t gyro_x = 0;
-uint16_t gyro_y = 0;
-uint16_t gyro_z = 0;
+float gyro_x = 0;
+float gyro_y = 0;
+float gyro_z = 0;
+
+float angle_x = 0;
+float angle_y = 0;
+float angle_z = 0;
 
 uint32_t sensorReadCycleTime = 0;
 uint32_t controlLoopCycleTime = 0;
@@ -889,7 +893,7 @@ bool IMUSensorSetup(I2C_HandleTypeDef *i2cHandle)
 	return true;
 }
 
-int readAccelValues(I2C_HandleTypeDef *i2cHandle, uint16_t* x, uint16_t* y, uint16_t* z)
+int readAccelValues(I2C_HandleTypeDef *i2cHandle, float* x, float* y, float* z)
 {
 
 	int ret = 0;
@@ -903,16 +907,16 @@ int readAccelValues(I2C_HandleTypeDef *i2cHandle, uint16_t* x, uint16_t* y, uint
 	return ret;
 }
 
-int readGyroValues(I2C_HandleTypeDef *i2cHandle, uint16_t* x, uint16_t* y, uint16_t* z)
+int readGyroValues(I2C_HandleTypeDef *i2cHandle, float* x, float* y, float* z)
 {
 
 	int ret = 0;
 	uint8_t buf[6];
 
 	ret = HAL_I2C_Mem_Read(i2cHandle, _MPU6050_I2C_ADDRESS, _MPU6050_GYRO_XOUTH, 1, buf, 6, HAL_MAX_DELAY);
-	*x = buf[0] << 8 | buf[1];
-	*y = buf[2] << 8 | buf[3];
-	*z = buf[4] << 8 | buf[5];
+	*x = (int16_t)(~(buf[0] << 8 | buf[1])+1) / 32.8;
+	*y =  (int16_t)(~(buf[2] << 8 | buf[3])+1) / 32.8;
+	*z =  (int16_t)(~(buf[4] << 8 | buf[5])+1) / 32.8;
 
 	return ret;
 }
@@ -988,39 +992,62 @@ void colourSensorReadTsk(void *argument)
 	colourSensorSetup(&hi2c1);
 	IMUSensorSetup(&hi2c1);
 
+	// initialize for cycle timing
 	uint16_t last_time = __HAL_TIM_GET_COUNTER(&htim11);
 	uint16_t current_time = __HAL_TIM_GET_COUNTER(&htim11);
+
+	//float GyroErrorX, GyroErrorY, GyroErrorZ;
+	//uint32_t c = 0;
 
 	 /* Infinite loop */
 	for(;;)
 	{
-		//osDelay(3);
+		//c++;
 
-		 // Cycle timing
-		 current_time = __HAL_TIM_GET_COUNTER(&htim11);
-		 if(current_time > last_time)
-		 {
-			 sensorReadCycleTime = current_time-last_time;
-		 }else
-		 {
-			 sensorReadCycleTime = (65535 - last_time)+current_time;
-
-		 }
-		 last_time = __HAL_TIM_GET_COUNTER(&htim11);
+		// cycle timing
+		current_time = __HAL_TIM_GET_COUNTER(&htim11);
+		if(current_time > last_time)
+		{
+			sensorReadCycleTime = current_time-last_time;
+		}else
+		{
+			sensorReadCycleTime = (65535 - last_time)+current_time;
+		}
+		last_time = __HAL_TIM_GET_COUNTER(&htim11);
 
 		// read from side sensors
 		colourSensorRead(&hi2c3, &red_data_R, &green_data_R, &blue_data_R, &clear_data_R);
 		colourSensorRead(&hi2c1, &red_data_L, &green_data_L, &blue_data_L, &clear_data_L);
 
+		// read from center sensor
 		colourSensorRead(&hi2c2, &red_data_C, &green_data_C, &blue_data_C, &clear_data_C);
 
-		// read IMU
-		readAccelValues(&hi2c1, &accel_x, &accel_y, &accel_z);
-		readGyroValues(&hi2c1, &gyro_x, &gyro_y, &gyro_z);
-
-		// Calculate ratio of red wavelength to total wavelength strength
+		// calculate ratio of red wavelength to total wavelength strength
 		red_ratio_R = ((float)red_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
 		red_ratio_L = ((float)red_data_L / (float)(red_data_L+green_data_L+blue_data_L))*100;
+
+		// read acceleration and gyro data
+		//readAccelValues(&hi2c1, &accel_x, &accel_y, &accel_z);
+
+		readGyroValues(&hi2c1, &gyro_x, &gyro_y, &gyro_z);
+		gyro_x+= -4.19;
+		gyro_y+=0.34;
+		gyro_z+=0.89;
+		// calibration routine
+		//GyroErrorX += gyro_x;
+		//GyroErrorY += gyro_y;
+		//GyroErrorZ += gyro_z;
+		//angle_x = GyroErrorX / c;
+		//angle_y = GyroErrorY / c;
+		//angle_z = GyroErrorZ / c;
+
+
+
+		// calculate actual angle values
+		angle_x += gyro_x*sensorReadCycleTime*(1E-5);
+		angle_y += gyro_y*sensorReadCycleTime*(1E-5);
+		angle_z += gyro_z*sensorReadCycleTime*(1E-5);
+
 	 }
   /* USER CODE END colourSensorReadTsk */
 }
@@ -1076,7 +1103,7 @@ void wheelMotorTask(void *argument)
 	  {
 		 osDelay(1);
 
-		 // Cycle timing
+		 // cycle timing
 		 current_time = __HAL_TIM_GET_COUNTER(&htim11);
 		 if(current_time > last_time)
 		 {
@@ -1088,6 +1115,7 @@ void wheelMotorTask(void *argument)
 		 }
 		 last_time = __HAL_TIM_GET_COUNTER(&htim11);
 
+		// target detection routine
 		if((blue_data_C > target_max_blue && enable_autonomy) && !is_rescue_complete)
 		{
 

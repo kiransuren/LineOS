@@ -778,60 +778,140 @@ bool colourSensorSetup(I2C_HandleTypeDef *i2cHandle)
 	buf[0] = _APDS9960_GPENTH;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at A");
+		return false;
+	}
 	buf[0] = _APDS9960_GEXTH;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at B");
+		return false;
+	}
 	buf[0] = _APDS9960_GCONF1;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at C");
+		return false;
+	}
 	buf[0] = _APDS9960_GCONF2;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at D");
+		return false;
+	}
 	buf[0] = _APDS9960_GCONF4;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at E");
+		return false;
+	}
 	buf[0] = _APDS9960_GPULSE;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at F");
+		return false;
+	}
 	buf[0] = _APDS9960_ATIME;
 	buf[1] = 255;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at G");
+		return false;
+	}
 	buf[0] = _APDS9960_CONTROL;
 	buf[1] = 3;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at H");
+		return false;
+	}
 	buf[0] = _APDS9960_CONTROL;
 	buf[1] = 3;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at I");
+		return false;
+	}
 
 	//Clear all non-gesture interrupts
 	buf[0] = _APDS9960_AICLEAR;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 1, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at J");
+		return false;
+	}
 
 	//Clear gesture FIFOs and interrupt
 	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_GCONF4, 1, buf, 1, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at K");
+		return false;
+	}
 	buf[1] = buf[0];	// move current GCONF4 value into buf[1]
 	buf[1] |= _BIT_MASK_GCONF4_GFIFO_CLR;
 	buf[0] = _APDS9960_GCONF4;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at L");
+		return false;
+	}
 
 	//Disable sensor and all functions/interrupts
 	buf[0] = _APDS9960_ENABLE;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at M");
+		return false;
+	}
 	osDelay(25); //Sleeping could take at ~2-25 ms if engines were looping
 
 	//Re-enable sensor and wait 10ms for the power on delay to finish
 	buf[0] = 0;
 	buf[1] = 0;
 	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_ENABLE, 1, buf, 1, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at N");
+		return false;
+	}
 	buf[1] = buf[0];	// move current _APDS9960_ENABLE value into buf[1]
 	buf[1] |= _BIT_MASK_ENABLE_EN;
 	buf[1] |= _BIT_MASK_ENABLE_COLOR;
 	buf[0] = _APDS9960_ENABLE;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at O");
+		return false;
+	}
 	osDelay(25);
 	buf[0] = 100;
 	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_ENABLE, 1, buf, 1, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at P");
+		return false;
+	}
 
 	if(ret != HAL_OK)
 	{
@@ -990,7 +1070,7 @@ void colourSensorReadTsk(void *argument)
 	colourSensorSetup(&hi2c3);
 	colourSensorSetup(&hi2c2);
 	colourSensorSetup(&hi2c1);
-	IMUSensorSetup(&hi2c1);
+	//IMUSensorSetup(&hi2c1);
 
 	// initialize for cycle timing
 	uint16_t last_time = __HAL_TIM_GET_COUNTER(&htim11);
@@ -1020,7 +1100,7 @@ void colourSensorReadTsk(void *argument)
 		colourSensorRead(&hi2c1, &red_data_L, &green_data_L, &blue_data_L, &clear_data_L);
 
 		// read from center sensor
-		colourSensorRead(&hi2c2, &red_data_C, &green_data_C, &blue_data_C, &clear_data_C);
+		//colourSensorRead(&hi2c2, &red_data_C, &green_data_C, &blue_data_C, &clear_data_C);
 
 		// calculate ratio of red wavelength to total wavelength strength
 		red_ratio_R = ((float)red_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
@@ -1029,10 +1109,10 @@ void colourSensorReadTsk(void *argument)
 		// read acceleration and gyro data
 		//readAccelValues(&hi2c1, &accel_x, &accel_y, &accel_z);
 
-		readGyroValues(&hi2c1, &gyro_x, &gyro_y, &gyro_z);
-		gyro_x+= -4.19;
-		gyro_y+=0.34;
-		gyro_z+=0.89;
+		//readGyroValues(&hi2c1, &gyro_x, &gyro_y, &gyro_z);
+		//gyro_x+= -4.19;
+		//gyro_y+=0.34;
+		//gyro_z+=0.89;
 		// calibration routine
 		//GyroErrorX += gyro_x;
 		//GyroErrorY += gyro_y;
@@ -1044,9 +1124,9 @@ void colourSensorReadTsk(void *argument)
 
 
 		// calculate actual angle values
-		angle_x += gyro_x*sensorReadCycleTime*(1E-5);
-		angle_y += gyro_y*sensorReadCycleTime*(1E-5);
-		angle_z += gyro_z*sensorReadCycleTime*(1E-5);
+		//angle_x += gyro_x*sensorReadCycleTime*(1E-5);
+		//angle_y += gyro_y*sensorReadCycleTime*(1E-5);
+		//angle_z += gyro_z*sensorReadCycleTime*(1E-5);
 
 	 }
   /* USER CODE END colourSensorReadTsk */
@@ -1062,13 +1142,13 @@ void colourSensorReadTsk(void *argument)
 void wheelMotorTask(void *argument)
 {
   /* USER CODE BEGIN wheelMotorTask */
-	uint16_t base_speed = 80;	// (200) 50 is lowest possible
+	uint16_t base_speed = 180;	// (200) 50 is lowest possible
 	uint16_t base_turn_speed = 80;
-	uint16_t base_crawl_speed = 60;
+	uint16_t base_crawl_speed = 45;
 	uint16_t base_pivot_speed = 70;
 	float turn_compensation_factor = 0.75;
 
-	const uint16_t target_max_blue = 125; //125
+	const uint16_t target_max_blue = 78; //125
 
 	const float Kp = 1.5; //4, 6, 10 30
 	const float Ki = 0; //0
@@ -1079,7 +1159,7 @@ void wheelMotorTask(void *argument)
 	float integral = 0;
 
 	const uint16_t open_pwm = 100;
-	const uint16_t closed_pwm = 50;
+	const uint16_t closed_pwm = 40; //50 is lowest
 
 	uint16_t last_time = __HAL_TIM_GET_COUNTER(&htim11);
 	uint16_t current_time = __HAL_TIM_GET_COUNTER(&htim11);
@@ -1156,7 +1236,7 @@ void wheelMotorTask(void *argument)
 			setMotorDirection(BACKWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(base_pivot_speed));
 			setRightMotorDutyCycle((uint16_t)(base_pivot_speed));
-			osDelay(2000);
+			osDelay(1800);
 
 			// Stop for stabilization
 			setMotorDirection(FORWARD, LEFT);

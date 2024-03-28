@@ -87,6 +87,7 @@ I2C_HandleTypeDef hi2c3;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim11;
 
 UART_HandleTypeDef huart2;
 
@@ -131,6 +132,7 @@ static void MX_I2C1_Init(void);
 static void MX_I2C3_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_I2C2_Init(void);
+static void MX_TIM11_Init(void);
 void hearbeatTaskFunc(void *argument);
 void grabberMotorTaskFunc(void *argument);
 void colourSensorReadTsk(void *argument);
@@ -193,7 +195,8 @@ uint16_t gyro_x = 0;
 uint16_t gyro_y = 0;
 uint16_t gyro_z = 0;
 
-volatile uint32_t elapsedTimeMs = 0;
+uint32_t sensorReadCycleTime = 0;
+uint32_t controlLoopCycleTime = 0;
 
 /* USER CODE END 0 */
 
@@ -232,6 +235,7 @@ int main(void)
   MX_I2C3_Init();
   MX_TIM1_Init();
   MX_I2C2_Init();
+  MX_TIM11_Init();
   /* USER CODE BEGIN 2 */
 
   // Start timer for grabber servo
@@ -243,6 +247,8 @@ int main(void)
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
   htim3.Instance->CCR1 = 0; // initialize duty cycle to 0% - Motor off
   htim3.Instance->CCR2 = 0; // initialize duty cycle to 0% - Motor off
+
+  HAL_TIM_Base_Start(&htim11);	// 100Khz
 
   /* USER CODE END 2 */
 
@@ -563,6 +569,37 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 2 */
   HAL_TIM_MspPostInit(&htim3);
+
+}
+
+/**
+  * @brief TIM11 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM11_Init(void)
+{
+
+  /* USER CODE BEGIN TIM11_Init 0 */
+
+  /* USER CODE END TIM11_Init 0 */
+
+  /* USER CODE BEGIN TIM11_Init 1 */
+
+  /* USER CODE END TIM11_Init 1 */
+  htim11.Instance = TIM11;
+  htim11.Init.Prescaler = 105-1;
+  htim11.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim11.Init.Period = 65535;
+  htim11.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim11.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim11) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM11_Init 2 */
+
+  /* USER CODE END TIM11_Init 2 */
 
 }
 
@@ -978,10 +1015,26 @@ void colourSensorReadTsk(void *argument)
 	colourSensorSetup(&hi2c1);
 	IMUSensorSetup(&hi2c1);
 
+	uint16_t last_time = __HAL_TIM_GET_COUNTER(&htim11);
+	uint16_t current_time = __HAL_TIM_GET_COUNTER(&htim11);
+
 	 /* Infinite loop */
 	for(;;)
 	{
 		//osDelay(3);
+
+		 // Cycle timing
+		 current_time = __HAL_TIM_GET_COUNTER(&htim11);
+		 if(current_time > last_time)
+		 {
+			 sensorReadCycleTime = current_time-last_time;
+		 }else
+		 {
+			 sensorReadCycleTime = (65535 - last_time)+current_time;
+
+		 }
+		 last_time = __HAL_TIM_GET_COUNTER(&htim11);
+
 		// read from side sensors
 		colourSensorRead(&hi2c3, &red_data_R, &green_data_R, &blue_data_R, &clear_data_R);
 		colourSensorRead(&hi2c1, &red_data_L, &green_data_L, &blue_data_L, &clear_data_L);
@@ -1028,6 +1081,9 @@ void wheelMotorTask(void *argument)
 	const uint16_t open_pwm = 100;
 	const uint16_t closed_pwm = 50;
 
+	uint16_t last_time = __HAL_TIM_GET_COUNTER(&htim11);
+	uint16_t current_time = __HAL_TIM_GET_COUNTER(&htim11);
+
 	setMotorDirection(FORWARD, LEFT);
 	setMotorDirection(FORWARD, RIGHT);
 	setLeftMotorDutyCycle((uint16_t)(0));
@@ -1045,10 +1101,23 @@ void wheelMotorTask(void *argument)
 	  /* Infinite loop */
 	  for(;;)
 	  {
-		//osDelay(3);
+		 osDelay(1);
+
+		 // Cycle timing
+		 current_time = __HAL_TIM_GET_COUNTER(&htim11);
+		 if(current_time > last_time)
+		 {
+			 controlLoopCycleTime = current_time-last_time;
+		 }else
+		 {
+			 controlLoopCycleTime = (65535 - last_time)+current_time;
+
+		 }
+		 last_time = __HAL_TIM_GET_COUNTER(&htim11);
 
 		if((blue_data_C > target_max_blue && enable_autonomy) && !is_rescue_complete)
 		{
+
 			// Stop to stabilize
 			setLeftMotorDutyCycle((uint16_t)(0));
 			setRightMotorDutyCycle((uint16_t)(0));

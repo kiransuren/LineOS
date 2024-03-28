@@ -842,29 +842,18 @@ int colourSensorRead(I2C_HandleTypeDef *i2cHandle, uint16_t* red, uint16_t* gree
 {
 
 	int ret = 0;
-	uint8_t buf[2];
+	uint8_t buf[8];
 
 	// Check if color data ready
 	//ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_STATUS, 1, buf, 1, HAL_MAX_DELAY);
 	//uint8_t c_data_ready = buf[0] & _BIT_MASK_STATUS_AVALID;
 
 	//read colour data from I2C
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_CDATAL, 1, buf, 2, HAL_MAX_DELAY);
+	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_CDATAL, 1, buf, 8, HAL_MAX_DELAY);
 	*clear = buf[1] << 8 | buf[0];
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_RDATAL, 1, buf, 2, HAL_MAX_DELAY);
-	*red = buf[1] << 8 | buf[0];
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_GDATAL, 1, buf, 2, HAL_MAX_DELAY);
-	*green = buf[1] << 8 | buf[0];
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_BDATAL, 1, buf, 2, HAL_MAX_DELAY);
-	*blue = buf[1] << 8 | buf[0];
+	*red = buf[3] << 8 | buf[2];
+	*green = buf[5] << 8 | buf[4];
+	*blue = buf[7] << 8 | buf[6];
 
 	return ret;
 }
@@ -904,20 +893,12 @@ int readAccelValues(I2C_HandleTypeDef *i2cHandle, uint16_t* x, uint16_t* y, uint
 {
 
 	int ret = 0;
-	uint8_t buf[2];
+	uint8_t buf[6];
 
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(i2cHandle, _MPU6050_I2C_ADDRESS, _MPU6050_ACCEL_XOUTH, 1, buf, 2, HAL_MAX_DELAY);
+	ret = HAL_I2C_Mem_Read(i2cHandle, _MPU6050_I2C_ADDRESS, _MPU6050_ACCEL_XOUTH, 1, buf, 6, HAL_MAX_DELAY);
 	*x = buf[0] << 8 | buf[1];
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(i2cHandle, _MPU6050_I2C_ADDRESS, _MPU6050_ACCEL_YOUTH, 1, buf, 2, HAL_MAX_DELAY);
-	*y = buf[0] << 8 | buf[1];
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(i2cHandle, _MPU6050_I2C_ADDRESS, _MPU6050_ACCEL_ZOUTH, 1, buf, 2, HAL_MAX_DELAY);
-	*z = buf[0] << 8 | buf[1];
+	*y = buf[2] << 8 | buf[3];
+	*z = buf[4] << 8 | buf[5];
 
 	return ret;
 }
@@ -926,20 +907,12 @@ int readGyroValues(I2C_HandleTypeDef *i2cHandle, uint16_t* x, uint16_t* y, uint1
 {
 
 	int ret = 0;
-	uint8_t buf[2];
+	uint8_t buf[6];
 
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(i2cHandle, _MPU6050_I2C_ADDRESS, _MPU6050_GYRO_XOUTH, 1, buf, 2, HAL_MAX_DELAY);
+	ret = HAL_I2C_Mem_Read(i2cHandle, _MPU6050_I2C_ADDRESS, _MPU6050_GYRO_XOUTH, 1, buf, 6, HAL_MAX_DELAY);
 	*x = buf[0] << 8 | buf[1];
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(i2cHandle, _MPU6050_I2C_ADDRESS, _MPU6050_GYRO_YOUTH, 1, buf, 2, HAL_MAX_DELAY);
-	*y = buf[0] << 8 | buf[1];
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(i2cHandle, _MPU6050_I2C_ADDRESS, _MPU6050_GYRO_ZOUTH, 1, buf, 2, HAL_MAX_DELAY);
-	*z = buf[0] << 8 | buf[1];
+	*y = buf[2] << 8 | buf[3];
+	*z = buf[4] << 8 | buf[5];
 
 	return ret;
 }

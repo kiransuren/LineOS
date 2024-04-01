@@ -1100,7 +1100,7 @@ void colourSensorReadTsk(void *argument)
 		colourSensorRead(&hi2c1, &red_data_L, &green_data_L, &blue_data_L, &clear_data_L);
 
 		// read from center sensor
-		//colourSensorRead(&hi2c2, &red_data_C, &green_data_C, &blue_data_C, &clear_data_C);
+		colourSensorRead(&hi2c2, &red_data_C, &green_data_C, &blue_data_C, &clear_data_C);
 
 		// calculate ratio of red wavelength to total wavelength strength
 		red_ratio_R = ((float)red_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
@@ -1144,11 +1144,12 @@ void wheelMotorTask(void *argument)
   /* USER CODE BEGIN wheelMotorTask */
 	uint16_t base_speed = 180;	// (200) 50 is lowest possible
 	uint16_t base_turn_speed = 80;
-	uint16_t base_crawl_speed = 45;
-	uint16_t base_pivot_speed = 70;
+	uint16_t base_crawl_speed = 80;
+	uint16_t base_pivot_speed = 80;
 	float turn_compensation_factor = 0.75;
 
 	const uint16_t target_max_blue = 78; //125
+	const uint16_t start_line_blue = 40;
 
 	const float Kp = 1.5; //4, 6, 10 30
 	const float Ki = 0; //0
@@ -1181,7 +1182,7 @@ void wheelMotorTask(void *argument)
 	  /* Infinite loop */
 	  for(;;)
 	  {
-		 osDelay(1);
+		 //osDelay(1);
 
 		 // cycle timing
 		 current_time = __HAL_TIM_GET_COUNTER(&htim11);
@@ -1194,6 +1195,21 @@ void wheelMotorTask(void *argument)
 
 		 }
 		 last_time = __HAL_TIM_GET_COUNTER(&htim11);
+
+
+		// start line detection routine
+		if((blue_data_R < 45 && blue_data_L < 45 ) && (is_rescue_complete && enable_autonomy))
+		{
+			if(blue_data_C > 40)
+			{
+				// Stop to stabilize
+				setLeftMotorDutyCycle((uint16_t)(0));
+				setRightMotorDutyCycle((uint16_t)(0));
+				htim1.Instance->CCR2 = open_pwm;
+				osDelay(10000);
+			}
+
+		}
 
 		// target detection routine
 		if((blue_data_C > target_max_blue && enable_autonomy) && !is_rescue_complete)
@@ -1212,7 +1228,7 @@ void wheelMotorTask(void *argument)
 			setMotorDirection(FORWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(base_crawl_speed));
 			setRightMotorDutyCycle((uint16_t)(base_crawl_speed));
-			osDelay(600);
+			osDelay(350);
 
 			// Stop to stabilize
 			setLeftMotorDutyCycle((uint16_t)(0));
@@ -1228,7 +1244,7 @@ void wheelMotorTask(void *argument)
 			setMotorDirection(FORWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(base_crawl_speed));
 			setRightMotorDutyCycle((uint16_t)(base_crawl_speed));
-			osDelay(400);
+			osDelay(200);
 
 
 			// Pivot turn right
@@ -1236,7 +1252,7 @@ void wheelMotorTask(void *argument)
 			setMotorDirection(BACKWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(base_pivot_speed));
 			setRightMotorDutyCycle((uint16_t)(base_pivot_speed));
-			osDelay(1800);
+			osDelay(1300);
 
 			// Stop for stabilization
 			setMotorDirection(FORWARD, LEFT);
@@ -1294,7 +1310,7 @@ void wheelMotorTask(void *argument)
 		d_term = Kd * derivative;
 		i_term = Ki * integral;
 
-		control_signal = Kp * error + Kd * derivative; // + Ki * integral;
+		control_signal = Kp * error; //Kd * derivative; // + Ki * integral;
 
 		if(control_signal > 0)
 		{

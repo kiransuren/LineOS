@@ -59,11 +59,20 @@ static const uint16_t _APDS9960_I2C_ADDRESS = 0x39<<1; //use 8-bit address
 #define _APDS9960_GSTATUS 0xAF
 #define _APDS9960_AICLEAR 0xE7
 #define _APDS9960_GFIFO_U 0xFC
-
 #define _BIT_MASK_GCONF4_GFIFO_CLR 0x04
 #define _BIT_MASK_ENABLE_EN 0x01
 #define _BIT_MASK_ENABLE_COLOR 0x02
 #define _BIT_MASK_STATUS_AVALID 0x01
+
+static const uint16_t _MPU6050_I2C_ADDRESS = 0x68<<1;  //use 8-bit address
+#define _MPU6050_ACCEL_XOUTH 0x3B
+#define _MPU6050_ACCEL_YOUTH 0x3D
+#define _MPU6050_ACCEL_ZOUTH 0x3F
+
+#define _MPU6050_GYRO_XOUTH 0x43
+#define _MPU6050_GYRO_YOUTH 0x45
+#define _MPU6050_GYRO_ZOUTH 0x47
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -78,6 +87,7 @@ I2C_HandleTypeDef hi2c3;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim11;
 
 UART_HandleTypeDef huart2;
 
@@ -122,6 +132,7 @@ static void MX_I2C1_Init(void);
 static void MX_I2C3_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_I2C2_Init(void);
+static void MX_TIM11_Init(void);
 void hearbeatTaskFunc(void *argument);
 void grabberMotorTaskFunc(void *argument);
 void colourSensorReadTsk(void *argument);
@@ -154,12 +165,15 @@ float d_term = 0;
 bool enable_autonomy = false;
 bool enable_motor_test = false;
 bool enable_pivot_test = false;
-bool is_rescue_complete = false;
+bool is_rescue_complete =false;
+bool near_target_milestone = false;
 
 float control_signal = 0;
 float error_signal = 0;
 uint32_t leftMotorDuty = 0;
 uint32_t rightMotorDuty = 0;
+uint32_t appliedLeftMotorDuty = 0;
+uint32_t appliedRightMotorDuty = 0;
 
 uint16_t clear_data_L = 0;
 uint16_t red_data_L = 0;
@@ -176,7 +190,23 @@ uint16_t red_data_C = 0;
 uint16_t green_data_C = 0;
 uint16_t blue_data_C = 0;
 
-volatile uint32_t elapsedTimeMs = 0;
+float accel_x = 0;
+float accel_y = 0;
+float accel_z = 0;
+
+float gyro_x = 0;
+float gyro_y = 0;
+float gyro_z = 0;
+
+float angle_x = 0;
+float angle_y = 0;
+float angle_z = 0;
+
+float total_time = 0;
+float autonomy_start_time = 0;
+
+uint32_t sensorReadCycleTime = 0;
+uint32_t controlLoopCycleTime = 0;
 
 /* USER CODE END 0 */
 
@@ -215,6 +245,7 @@ int main(void)
   MX_I2C3_Init();
   MX_TIM1_Init();
   MX_I2C2_Init();
+  MX_TIM11_Init();
   /* USER CODE BEGIN 2 */
 
   // Start timer for grabber servo
@@ -226,6 +257,8 @@ int main(void)
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
   htim3.Instance->CCR1 = 0; // initialize duty cycle to 0% - Motor off
   htim3.Instance->CCR2 = 0; // initialize duty cycle to 0% - Motor off
+
+  HAL_TIM_Base_Start(&htim11);	// 100Khz
 
   /* USER CODE END 2 */
 
@@ -550,6 +583,37 @@ static void MX_TIM3_Init(void)
 }
 
 /**
+  * @brief TIM11 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM11_Init(void)
+{
+
+  /* USER CODE BEGIN TIM11_Init 0 */
+
+  /* USER CODE END TIM11_Init 0 */
+
+  /* USER CODE BEGIN TIM11_Init 1 */
+
+  /* USER CODE END TIM11_Init 1 */
+  htim11.Instance = TIM11;
+  htim11.Init.Prescaler = 105-1;
+  htim11.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim11.Init.Period = 65535;
+  htim11.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim11.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim11) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM11_Init 2 */
+
+  /* USER CODE END TIM11_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -720,60 +784,140 @@ bool colourSensorSetup(I2C_HandleTypeDef *i2cHandle)
 	buf[0] = _APDS9960_GPENTH;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at A");
+		return false;
+	}
 	buf[0] = _APDS9960_GEXTH;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at B");
+		return false;
+	}
 	buf[0] = _APDS9960_GCONF1;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at C");
+		return false;
+	}
 	buf[0] = _APDS9960_GCONF2;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at D");
+		return false;
+	}
 	buf[0] = _APDS9960_GCONF4;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at E");
+		return false;
+	}
 	buf[0] = _APDS9960_GPULSE;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at F");
+		return false;
+	}
 	buf[0] = _APDS9960_ATIME;
 	buf[1] = 255;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at G");
+		return false;
+	}
 	buf[0] = _APDS9960_CONTROL;
 	buf[1] = 3;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at H");
+		return false;
+	}
 	buf[0] = _APDS9960_CONTROL;
 	buf[1] = 3;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at I");
+		return false;
+	}
 
 	//Clear all non-gesture interrupts
 	buf[0] = _APDS9960_AICLEAR;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 1, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at J");
+		return false;
+	}
 
 	//Clear gesture FIFOs and interrupt
 	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_GCONF4, 1, buf, 1, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at K");
+		return false;
+	}
 	buf[1] = buf[0];	// move current GCONF4 value into buf[1]
 	buf[1] |= _BIT_MASK_GCONF4_GFIFO_CLR;
 	buf[0] = _APDS9960_GCONF4;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at L");
+		return false;
+	}
 
 	//Disable sensor and all functions/interrupts
 	buf[0] = _APDS9960_ENABLE;
 	buf[1] = 0;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at M");
+		return false;
+	}
 	osDelay(25); //Sleeping could take at ~2-25 ms if engines were looping
 
 	//Re-enable sensor and wait 10ms for the power on delay to finish
 	buf[0] = 0;
 	buf[1] = 0;
 	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_ENABLE, 1, buf, 1, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at N");
+		return false;
+	}
 	buf[1] = buf[0];	// move current _APDS9960_ENABLE value into buf[1]
 	buf[1] |= _BIT_MASK_ENABLE_EN;
 	buf[1] |= _BIT_MASK_ENABLE_COLOR;
 	buf[0] = _APDS9960_ENABLE;
 	ret = HAL_I2C_Master_Transmit(i2cHandle, _APDS9960_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at O");
+		return false;
+	}
 	osDelay(25);
 	buf[0] = 100;
 	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_ENABLE, 1, buf, 1, HAL_MAX_DELAY);
+	if(ret != HAL_OK)
+	{
+		printf("FAILED at P");
+		return false;
+	}
 
 	if(ret != HAL_OK)
 	{
@@ -788,32 +932,82 @@ int colourSensorRead(I2C_HandleTypeDef *i2cHandle, uint16_t* red, uint16_t* gree
 {
 
 	int ret = 0;
-	uint8_t buf[2];
+	uint8_t buf[8];
 
 	// Check if color data ready
 	//ret = HAL_I2C_Mem_Read(&hi2c1, _APDS9960_I2C_ADDRESS, _APDS9960_STATUS, 1, buf, 1, HAL_MAX_DELAY);
 	//uint8_t c_data_ready = buf[0] & _BIT_MASK_STATUS_AVALID;
 
 	//read colour data from I2C
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_CDATAL, 1, buf, 2, HAL_MAX_DELAY);
+	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_CDATAL, 1, buf, 8, HAL_MAX_DELAY);
 	*clear = buf[1] << 8 | buf[0];
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_RDATAL, 1, buf, 2, HAL_MAX_DELAY);
-	*red = buf[1] << 8 | buf[0];
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_GDATAL, 1, buf, 2, HAL_MAX_DELAY);
-	*green = buf[1] << 8 | buf[0];
-	buf[0] = 0;
-	buf[1] = 0;
-	ret = HAL_I2C_Mem_Read(i2cHandle, _APDS9960_I2C_ADDRESS, _APDS9960_BDATAL, 1, buf, 2, HAL_MAX_DELAY);
-	*blue = buf[1] << 8 | buf[0];
+	*red = buf[3] << 8 | buf[2];
+	*green = buf[5] << 8 | buf[4];
+	*blue = buf[7] << 8 | buf[6];
 
 	return ret;
 }
+
+
+bool IMUSensorSetup(I2C_HandleTypeDef *i2cHandle)
+{
+	printf("IMU Sensor Setup BEGIN\n");
+	HAL_StatusTypeDef ret = HAL_OK;
+	uint8_t buf[2];
+
+	// trigger sensor reset
+	buf[0] = 0x6B;
+	buf[1] = 0;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _MPU6050_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+
+	// Configure Accelerometer Sensitivity - Full Scale Range (default +/- 2g)
+	buf[0] = 0x1C;
+	buf[1] = 0x10;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _MPU6050_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+
+	// Configure Gyro Sensitivity - Full Scale Range (default +/- 250deg/s)
+	buf[0] = 0x1B;
+	buf[1] = 0x10;
+	ret = HAL_I2C_Master_Transmit(i2cHandle, _MPU6050_I2C_ADDRESS, buf, 2, HAL_MAX_DELAY);
+
+	if(ret != HAL_OK)
+	{
+		printf("IMU sensor enable FAILED");
+		return false;
+	}
+	printf("IMU Sensor has been enabled\n");
+	return true;
+}
+
+int readAccelValues(I2C_HandleTypeDef *i2cHandle, float* x, float* y, float* z)
+{
+
+	int ret = 0;
+	uint8_t buf[6];
+
+	ret = HAL_I2C_Mem_Read(i2cHandle, _MPU6050_I2C_ADDRESS, _MPU6050_ACCEL_XOUTH, 1, buf, 6, HAL_MAX_DELAY);
+	*x = buf[0] << 8 | buf[1];
+	*y = buf[2] << 8 | buf[3];
+	*z = buf[4] << 8 | buf[5];
+
+	return ret;
+}
+
+int readGyroValues(I2C_HandleTypeDef *i2cHandle, float* x, float* y, float* z)
+{
+
+	int ret = 0;
+	uint8_t buf[6];
+
+	ret = HAL_I2C_Mem_Read(i2cHandle, _MPU6050_I2C_ADDRESS, _MPU6050_GYRO_XOUTH, 1, buf, 6, HAL_MAX_DELAY);
+	*x = (int16_t)(~(buf[0] << 8 | buf[1])+1) / 32.8;
+	*y =  (int16_t)(~(buf[2] << 8 | buf[3])+1) / 32.8;
+	*z =  (int16_t)(~(buf[4] << 8 | buf[5])+1) / 32.8;
+
+	return ret;
+}
+
+
 
 /* USER CODE END 4 */
 
@@ -839,6 +1033,10 @@ void hearbeatTaskFunc(void *argument)
 		 {
 			 debounce = false;
 			 enable_autonomy = !enable_autonomy;
+			 if(enable_autonomy)
+			 {
+				 autonomy_start_time = total_time;
+			 }
 			 printf("Button pressed, new autonomy state %d!", enable_autonomy);
 		 }
 	 }
@@ -882,20 +1080,65 @@ void colourSensorReadTsk(void *argument)
 	colourSensorSetup(&hi2c3);
 	colourSensorSetup(&hi2c2);
 	colourSensorSetup(&hi2c1);
+	//IMUSensorSetup(&hi2c1);
+
+	// initialize for cycle timing
+	uint16_t last_time = __HAL_TIM_GET_COUNTER(&htim11);
+	uint16_t current_time = __HAL_TIM_GET_COUNTER(&htim11);
+
+	//float GyroErrorX, GyroErrorY, GyroErrorZ;
+	//uint32_t c = 0;
 
 	 /* Infinite loop */
 	for(;;)
 	{
-		//osDelay(3);
+		//c++;
+
+		// cycle timing
+		current_time = __HAL_TIM_GET_COUNTER(&htim11);
+		if(current_time > last_time)
+		{
+			sensorReadCycleTime = current_time-last_time;
+		}else
+		{
+			sensorReadCycleTime = (65535 - last_time)+current_time;
+		}
+		last_time = __HAL_TIM_GET_COUNTER(&htim11);
+		total_time += (float)sensorReadCycleTime/100000;
+
 		// read from side sensors
 		colourSensorRead(&hi2c3, &red_data_R, &green_data_R, &blue_data_R, &clear_data_R);
 		colourSensorRead(&hi2c1, &red_data_L, &green_data_L, &blue_data_L, &clear_data_L);
 
+		// read from center sensor
 		colourSensorRead(&hi2c2, &red_data_C, &green_data_C, &blue_data_C, &clear_data_C);
 
-		// Calculate ratio of red wavelength to total wavelength strength
+		// calculate ratio of red wavelength to total wavelength strength
 		red_ratio_R = ((float)red_data_R / (float)(red_data_R+green_data_R+blue_data_R))*100;
 		red_ratio_L = ((float)red_data_L / (float)(red_data_L+green_data_L+blue_data_L))*100;
+
+		// read acceleration and gyro data
+		//readAccelValues(&hi2c1, &accel_x, &accel_y, &accel_z);
+
+		//readGyroValues(&hi2c1, &gyro_x, &gyro_y, &gyro_z);
+		//gyro_x+= -4.19;
+		//gyro_y+=0.34;
+		//gyro_z+=0.89;
+		// calibration routine
+		//GyroErrorX += gyro_x;
+		//GyroErrorY += gyro_y;
+		//GyroErrorZ += gyro_z;
+		//angle_x = GyroErrorX / c;
+		//angle_y = GyroErrorY / c;
+		//angle_z = GyroErrorZ / c;
+
+
+
+		// calculate actual angle values
+		//angle_x += gyro_x*sensorReadCycleTime*(1E-5);
+		//angle_y += gyro_y*sensorReadCycleTime*(1E-5);
+		//angle_z += gyro_z*sensorReadCycleTime*(1E-5);
+
 	 }
   /* USER CODE END colourSensorReadTsk */
 }
@@ -910,13 +1153,16 @@ void colourSensorReadTsk(void *argument)
 void wheelMotorTask(void *argument)
 {
   /* USER CODE BEGIN wheelMotorTask */
-	uint16_t base_speed = 80;	// (200) 50 is lowest possible
+	uint16_t base_speed = 180;	// (200) 50 is lowest possible
 	uint16_t base_turn_speed = 80;
-	uint16_t base_crawl_speed = 60;
-	uint16_t base_pivot_speed = 70;
+	uint16_t base_crawl_speed = 80;
+	uint16_t base_pivot_speed = 80;
 	float turn_compensation_factor = 0.75;
 
-	const uint16_t target_max_blue = 125; //125
+	const uint16_t target_max_blue = 150; //125
+	const uint16_t start_line_blue_side = 65;
+	const uint16_t start_line_blue_center = 65;
+	const float near_target_time = 26;
 
 	const float Kp = 1.5; //4, 6, 10 30
 	const float Ki = 0; //0
@@ -926,15 +1172,21 @@ void wheelMotorTask(void *argument)
 	float previous_error = 0;
 	float integral = 0;
 
-	const uint16_t open_pwm = 100;
-	const uint16_t closed_pwm = 50;
+	const uint16_t open_pwm = 70;
+	const uint16_t closed_pwm = 105; //50 is lowest
+
+	uint16_t last_time = __HAL_TIM_GET_COUNTER(&htim11);
+	uint16_t current_time = __HAL_TIM_GET_COUNTER(&htim11);
 
 	setMotorDirection(FORWARD, LEFT);
 	setMotorDirection(FORWARD, RIGHT);
 	setLeftMotorDutyCycle((uint16_t)(0));
 	setRightMotorDutyCycle((uint16_t)(0));
 
-	htim1.Instance->CCR2 = closed_pwm;
+	htim1.Instance->CCR2 = open_pwm;
+	osDelay(1000);
+	htim1.Instance->CCR2 = 0;
+
 
 	// enable pivot test
 	if(enable_pivot_test)
@@ -946,10 +1198,31 @@ void wheelMotorTask(void *argument)
 	  /* Infinite loop */
 	  for(;;)
 	  {
-		//osDelay(3);
+		 //osDelay(1);
 
-		if((blue_data_C > target_max_blue && enable_autonomy) && !is_rescue_complete)
+		 // cycle timing
+		 current_time = __HAL_TIM_GET_COUNTER(&htim11);
+		 if(current_time > last_time)
+		 {
+			 controlLoopCycleTime = current_time-last_time;
+		 }else
+		 {
+			 controlLoopCycleTime = (65535 - last_time)+current_time;
+
+		 }
+		 last_time = __HAL_TIM_GET_COUNTER(&htim11);
+
+		if(((total_time-autonomy_start_time) > near_target_time) && (enable_autonomy && !is_rescue_complete))
 		{
+			near_target_milestone = true;
+			base_speed = 100;	// (200) 50 is lowest possible
+			base_turn_speed = 60;
+		}
+
+		// target detection routine
+		if((blue_data_C > target_max_blue && enable_autonomy) && (!is_rescue_complete && near_target_milestone))
+		{
+
 			// Stop to stabilize
 			setLeftMotorDutyCycle((uint16_t)(0));
 			setRightMotorDutyCycle((uint16_t)(0));
@@ -957,13 +1230,6 @@ void wheelMotorTask(void *argument)
 			setMotorDirection(FORWARD, RIGHT);
 			htim1.Instance->CCR2 = open_pwm;
 			osDelay(1000);
-
-			// Crawl forward
-			setMotorDirection(FORWARD, LEFT);
-			setMotorDirection(FORWARD, RIGHT);
-			setLeftMotorDutyCycle((uint16_t)(base_crawl_speed));
-			setRightMotorDutyCycle((uint16_t)(base_crawl_speed));
-			osDelay(600);
 
 			// Stop to stabilize
 			setLeftMotorDutyCycle((uint16_t)(0));
@@ -979,7 +1245,7 @@ void wheelMotorTask(void *argument)
 			setMotorDirection(FORWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(base_crawl_speed));
 			setRightMotorDutyCycle((uint16_t)(base_crawl_speed));
-			osDelay(400);
+			osDelay(200);
 
 
 			// Pivot turn right
@@ -987,7 +1253,7 @@ void wheelMotorTask(void *argument)
 			setMotorDirection(BACKWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(base_pivot_speed));
 			setRightMotorDutyCycle((uint16_t)(base_pivot_speed));
-			osDelay(2000);
+			osDelay(1300);
 
 			// Stop for stabilization
 			setMotorDirection(FORWARD, LEFT);
@@ -998,6 +1264,22 @@ void wheelMotorTask(void *argument)
 
 			// Rescue routine complete
 			is_rescue_complete = true;
+			base_speed = 180;	// (200) 50 is lowest possible
+			base_turn_speed = 80;
+		}
+
+		// start line detection routine
+		if((blue_data_R < start_line_blue_side && blue_data_L < start_line_blue_side ) && (is_rescue_complete && enable_autonomy))
+		{
+			if(blue_data_C > start_line_blue_center)
+			{
+				// Stop to stabilize
+				setLeftMotorDutyCycle((uint16_t)(0));
+				setRightMotorDutyCycle((uint16_t)(0));
+				htim1.Instance->CCR2 = open_pwm;
+				osDelay(10000);
+			}
+
 		}
 
 		// Motor Control Test
@@ -1045,7 +1327,7 @@ void wheelMotorTask(void *argument)
 		d_term = Kd * derivative;
 		i_term = Ki * integral;
 
-		control_signal = Kp * error + Kd * derivative; // + Ki * integral;
+		control_signal = Kp * error; //Kd * derivative; // + Ki * integral;
 
 		if(control_signal > 0)
 		{
@@ -1090,14 +1372,19 @@ void wheelMotorTask(void *argument)
 			rightMotorDuty = base_speed;
 		}
 
+
+		appliedLeftMotorDuty = leftMotorDuty;
+		appliedRightMotorDuty = rightMotorDuty;
+
 		if(!enable_autonomy)
 		{
 			setRightMotorDutyCycle(0);
 			setLeftMotorDutyCycle(0);
 			continue;
 		}
-		setLeftMotorDutyCycle((uint16_t)(leftMotorDuty));
-		setRightMotorDutyCycle((uint16_t)(rightMotorDuty));
+
+		setLeftMotorDutyCycle((uint16_t)(appliedLeftMotorDuty));
+		setRightMotorDutyCycle((uint16_t)(appliedRightMotorDuty));
 
 	  }
 

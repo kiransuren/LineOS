@@ -165,7 +165,8 @@ float d_term = 0;
 bool enable_autonomy = false;
 bool enable_motor_test = false;
 bool enable_pivot_test = false;
-bool is_rescue_complete =false;
+bool is_rescue_complete = false;
+bool is_dropoff_complete = false;
 bool near_target_milestone = false;
 
 float control_signal = 0;
@@ -204,6 +205,7 @@ float angle_z = 0;
 
 float total_time = 0;
 float autonomy_start_time = 0;
+float target_reached_time = 0;
 
 uint32_t sensorReadCycleTime = 0;
 uint32_t controlLoopCycleTime = 0;
@@ -1212,11 +1214,48 @@ void wheelMotorTask(void *argument)
 		 }
 		 last_time = __HAL_TIM_GET_COUNTER(&htim11);
 
+		// slow down before reaching target
 		if(((total_time-autonomy_start_time) > near_target_time) && (enable_autonomy && !is_rescue_complete))
 		{
 			near_target_milestone = true;
 			base_speed = 100;	// (200) 50 is lowest possible
 			base_turn_speed = 60;
+		}
+
+
+		if((green_data_C > 75 && green_data_R > 95) && (is_rescue_complete && enable_autonomy))
+		{
+			if(((total_time-target_reached_time) > 4) && !is_dropoff_complete)
+			{
+				setLeftMotorDutyCycle((uint16_t)(0));
+				setRightMotorDutyCycle((uint16_t)(0));
+				setMotorDirection(FORWARD, LEFT);
+				setMotorDirection(FORWARD, RIGHT);
+				osDelay(500);
+
+				setLeftMotorDutyCycle((uint16_t)(base_speed));
+				setRightMotorDutyCycle((uint16_t)(base_speed));
+				osDelay(100);
+
+				setLeftMotorDutyCycle((uint16_t)(0));
+				setRightMotorDutyCycle((uint16_t)(0));
+				setMotorDirection(FORWARD, LEFT);
+				setMotorDirection(FORWARD, RIGHT);
+				osDelay(500);
+				htim1.Instance->CCR2 = open_pwm;
+				osDelay(500);
+
+				setMotorDirection(BACKWARD, LEFT);
+				setMotorDirection(BACKWARD, RIGHT);
+				setLeftMotorDutyCycle((uint16_t)(base_speed));
+				setRightMotorDutyCycle((uint16_t)(base_speed));
+				osDelay(600);
+				htim1.Instance->CCR2 = closed_pwm;
+				osDelay(100);
+				setMotorDirection(FORWARD, LEFT);
+				setMotorDirection(FORWARD, RIGHT);
+				is_dropoff_complete = true;
+			}
 		}
 
 		// target detection routine
@@ -1231,6 +1270,22 @@ void wheelMotorTask(void *argument)
 			htim1.Instance->CCR2 = open_pwm;
 			osDelay(500);
 
+			// Crawl forward
+			setMotorDirection(FORWARD, LEFT);
+			setMotorDirection(FORWARD, RIGHT);
+			setLeftMotorDutyCycle((uint16_t)(base_crawl_speed));
+			setRightMotorDutyCycle((uint16_t)(base_crawl_speed));
+			osDelay(150);
+
+			// Stop to stabilize
+			setLeftMotorDutyCycle((uint16_t)(0));
+			setRightMotorDutyCycle((uint16_t)(0));
+			setMotorDirection(FORWARD, LEFT);
+			setMotorDirection(FORWARD, RIGHT);
+			htim1.Instance->CCR2 = open_pwm;
+			osDelay(500);
+
+
 			// close grabber
 			htim1.Instance->CCR2 = closed_pwm;
 			osDelay(500);
@@ -1240,14 +1295,14 @@ void wheelMotorTask(void *argument)
 			setMotorDirection(FORWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(base_crawl_speed));
 			setRightMotorDutyCycle((uint16_t)(base_crawl_speed));
-			osDelay(400);
+			osDelay(500);
 
 			// Pivot turn right
 			setMotorDirection(FORWARD, LEFT);
 			setMotorDirection(BACKWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(base_pivot_speed));
 			setRightMotorDutyCycle((uint16_t)(base_pivot_speed));
-			osDelay(1300);
+			osDelay(1400);
 
 			// Stop for stabilization
 			setMotorDirection(FORWARD, LEFT);
@@ -1260,6 +1315,7 @@ void wheelMotorTask(void *argument)
 			is_rescue_complete = true;
 			base_speed = 180;	// (200) 50 is lowest possible
 			base_turn_speed = 80;
+			target_reached_time = total_time;
 		}
 
 		// start line detection routine

@@ -165,12 +165,15 @@ float d_term = 0;
 bool enable_autonomy = false;
 bool enable_motor_test = false;
 bool enable_pivot_test = false;
-bool is_rescue_complete = false;
+bool is_rescue_complete =false;
+bool near_target_milestone = false;
 
 float control_signal = 0;
 float error_signal = 0;
 uint32_t leftMotorDuty = 0;
 uint32_t rightMotorDuty = 0;
+uint32_t appliedLeftMotorDuty = 0;
+uint32_t appliedRightMotorDuty = 0;
 
 uint16_t clear_data_L = 0;
 uint16_t red_data_L = 0;
@@ -198,6 +201,9 @@ float gyro_z = 0;
 float angle_x = 0;
 float angle_y = 0;
 float angle_z = 0;
+
+float total_time = 0;
+float autonomy_start_time = 0;
 
 uint32_t sensorReadCycleTime = 0;
 uint32_t controlLoopCycleTime = 0;
@@ -1027,6 +1033,10 @@ void hearbeatTaskFunc(void *argument)
 		 {
 			 debounce = false;
 			 enable_autonomy = !enable_autonomy;
+			 if(enable_autonomy)
+			 {
+				 autonomy_start_time = total_time;
+			 }
 			 printf("Button pressed, new autonomy state %d!", enable_autonomy);
 		 }
 	 }
@@ -1094,6 +1104,7 @@ void colourSensorReadTsk(void *argument)
 			sensorReadCycleTime = (65535 - last_time)+current_time;
 		}
 		last_time = __HAL_TIM_GET_COUNTER(&htim11);
+		total_time += (float)sensorReadCycleTime/100000;
 
 		// read from side sensors
 		colourSensorRead(&hi2c3, &red_data_R, &green_data_R, &blue_data_R, &clear_data_R);
@@ -1148,8 +1159,10 @@ void wheelMotorTask(void *argument)
 	uint16_t base_pivot_speed = 80;
 	float turn_compensation_factor = 0.75;
 
-	const uint16_t target_max_blue = 78; //125
-	const uint16_t start_line_blue = 40;
+	const uint16_t target_max_blue = 150; //125
+	const uint16_t start_line_blue_side = 65;
+	const uint16_t start_line_blue_center = 65;
+	const float near_target_time = 26;
 
 	const float Kp = 1.5; //4, 6, 10 30
 	const float Ki = 0; //0
@@ -1159,8 +1172,8 @@ void wheelMotorTask(void *argument)
 	float previous_error = 0;
 	float integral = 0;
 
-	const uint16_t open_pwm = 100;
-	const uint16_t closed_pwm = 40; //50 is lowest
+	const uint16_t open_pwm = 70;
+	const uint16_t closed_pwm = 105; //50 is lowest
 
 	uint16_t last_time = __HAL_TIM_GET_COUNTER(&htim11);
 	uint16_t current_time = __HAL_TIM_GET_COUNTER(&htim11);
@@ -1170,7 +1183,10 @@ void wheelMotorTask(void *argument)
 	setLeftMotorDutyCycle((uint16_t)(0));
 	setRightMotorDutyCycle((uint16_t)(0));
 
-	htim1.Instance->CCR2 = closed_pwm;
+	htim1.Instance->CCR2 = open_pwm;
+	osDelay(1000);
+	htim1.Instance->CCR2 = 0;
+
 
 	// enable pivot test
 	if(enable_pivot_test)
@@ -1196,23 +1212,15 @@ void wheelMotorTask(void *argument)
 		 }
 		 last_time = __HAL_TIM_GET_COUNTER(&htim11);
 
-
-		// start line detection routine
-		if((blue_data_R < 45 && blue_data_L < 45 ) && (is_rescue_complete && enable_autonomy))
+		if(((total_time-autonomy_start_time) > near_target_time) && (enable_autonomy && !is_rescue_complete))
 		{
-			if(blue_data_C > 40)
-			{
-				// Stop to stabilize
-				setLeftMotorDutyCycle((uint16_t)(0));
-				setRightMotorDutyCycle((uint16_t)(0));
-				htim1.Instance->CCR2 = open_pwm;
-				osDelay(10000);
-			}
-
+			near_target_milestone = true;
+			base_speed = 100;	// (200) 50 is lowest possible
+			base_turn_speed = 60;
 		}
 
 		// target detection routine
-		if((blue_data_C > target_max_blue && enable_autonomy) && !is_rescue_complete)
+		if((blue_data_C > target_max_blue && enable_autonomy) && (!is_rescue_complete && near_target_milestone))
 		{
 
 			// Stop to stabilize
@@ -1222,13 +1230,6 @@ void wheelMotorTask(void *argument)
 			setMotorDirection(FORWARD, RIGHT);
 			htim1.Instance->CCR2 = open_pwm;
 			osDelay(1000);
-
-			// Crawl forward
-			setMotorDirection(FORWARD, LEFT);
-			setMotorDirection(FORWARD, RIGHT);
-			setLeftMotorDutyCycle((uint16_t)(base_crawl_speed));
-			setRightMotorDutyCycle((uint16_t)(base_crawl_speed));
-			osDelay(350);
 
 			// Stop to stabilize
 			setLeftMotorDutyCycle((uint16_t)(0));
@@ -1263,6 +1264,22 @@ void wheelMotorTask(void *argument)
 
 			// Rescue routine complete
 			is_rescue_complete = true;
+			base_speed = 180;	// (200) 50 is lowest possible
+			base_turn_speed = 80;
+		}
+
+		// start line detection routine
+		if((blue_data_R < start_line_blue_side && blue_data_L < start_line_blue_side ) && (is_rescue_complete && enable_autonomy))
+		{
+			if(blue_data_C > start_line_blue_center)
+			{
+				// Stop to stabilize
+				setLeftMotorDutyCycle((uint16_t)(0));
+				setRightMotorDutyCycle((uint16_t)(0));
+				htim1.Instance->CCR2 = open_pwm;
+				osDelay(10000);
+			}
+
 		}
 
 		// Motor Control Test
@@ -1355,14 +1372,19 @@ void wheelMotorTask(void *argument)
 			rightMotorDuty = base_speed;
 		}
 
+
+		appliedLeftMotorDuty = leftMotorDuty;
+		appliedRightMotorDuty = rightMotorDuty;
+
 		if(!enable_autonomy)
 		{
 			setRightMotorDutyCycle(0);
 			setLeftMotorDutyCycle(0);
 			continue;
 		}
-		setLeftMotorDutyCycle((uint16_t)(leftMotorDuty));
-		setRightMotorDutyCycle((uint16_t)(rightMotorDuty));
+
+		setLeftMotorDutyCycle((uint16_t)(appliedLeftMotorDuty));
+		setRightMotorDutyCycle((uint16_t)(appliedRightMotorDuty));
 
 	  }
 

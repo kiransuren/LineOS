@@ -1157,7 +1157,7 @@ void wheelMotorTask(void *argument)
 	uint16_t base_turn_speed = 80;
 	uint16_t base_crawl_speed = 80;
 	uint16_t base_pivot_speed = 80;
-	float turn_compensation_factor = 0.75;
+	float turn_compensation_factor = 0.95;
 
 	const uint16_t target_max_blue = 150; //125
 	const uint16_t start_line_blue_side = 65;
@@ -1229,24 +1229,18 @@ void wheelMotorTask(void *argument)
 			setMotorDirection(FORWARD, LEFT);
 			setMotorDirection(FORWARD, RIGHT);
 			htim1.Instance->CCR2 = open_pwm;
-			osDelay(1000);
-
-			// Stop to stabilize
-			setLeftMotorDutyCycle((uint16_t)(0));
-			setRightMotorDutyCycle((uint16_t)(0));
-			osDelay(1000);
+			osDelay(500);
 
 			// close grabber
 			htim1.Instance->CCR2 = closed_pwm;
-			osDelay(1000);
+			osDelay(500);
 
 			// Crawl forward
 			setMotorDirection(FORWARD, LEFT);
 			setMotorDirection(FORWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(base_crawl_speed));
 			setRightMotorDutyCycle((uint16_t)(base_crawl_speed));
-			osDelay(200);
-
+			osDelay(400);
 
 			// Pivot turn right
 			setMotorDirection(FORWARD, LEFT);
@@ -1260,7 +1254,7 @@ void wheelMotorTask(void *argument)
 			setMotorDirection(FORWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(0));
 			setRightMotorDutyCycle((uint16_t)(0));
-			osDelay(1000);
+			osDelay(500);
 
 			// Rescue routine complete
 			is_rescue_complete = true;
@@ -1277,7 +1271,10 @@ void wheelMotorTask(void *argument)
 				setLeftMotorDutyCycle((uint16_t)(0));
 				setRightMotorDutyCycle((uint16_t)(0));
 				htim1.Instance->CCR2 = open_pwm;
-				osDelay(10000);
+				while(true)
+				{
+					printf("Course complete!");
+				}
 			}
 
 		}

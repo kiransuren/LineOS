@@ -163,8 +163,6 @@ float i_term = 0;
 float d_term = 0;
 
 bool enable_autonomy = false;
-bool enable_motor_test = false;
-bool enable_pivot_test = false;
 bool is_rescue_complete = false;
 bool is_dropoff_complete = false;
 bool near_target_milestone = false;
@@ -1191,19 +1189,10 @@ void wheelMotorTask(void *argument)
 	osDelay(1000);
 	htim1.Instance->CCR2 = 0;
 
-
-	// enable pivot test
-	if(enable_pivot_test)
-	{
-		base_speed = 0;
-	}
-
 	const float taskPeriod = 3;
 	  /* Infinite loop */
 	  for(;;)
 	  {
-		 //osDelay(1);
-
 		 // cycle timing
 		 current_time = __HAL_TIM_GET_COUNTER(&htim11);
 		 if(current_time > last_time)
@@ -1345,40 +1334,6 @@ void wheelMotorTask(void *argument)
 
 		}
 
-		// Motor Control Test
-		if(enable_motor_test && enable_autonomy)
-		{
-
-			// Move Forward
-			setMotorDirection(BACKWARD, LEFT);
-			setMotorDirection(FORWARD, RIGHT);
-			setLeftMotorDutyCycle((uint16_t)(base_speed));
-			setRightMotorDutyCycle((uint16_t)(base_speed));
-			osDelay(2000);
-
-			// Move Backward
-			setMotorDirection(BACKWARD, LEFT);
-			setMotorDirection(BACKWARD, RIGHT);
-			setLeftMotorDutyCycle((uint16_t)(base_speed));
-			setRightMotorDutyCycle((uint16_t)(base_speed));
-			osDelay(2000);
-
-			// Turn Left
-			setMotorDirection(BACKWARD, LEFT);
-			setMotorDirection(FORWARD, RIGHT);
-			setLeftMotorDutyCycle((uint16_t)(base_speed));
-			setRightMotorDutyCycle((uint16_t)(base_speed));
-			osDelay(2000);
-
-			// Turn Right
-			setMotorDirection(FORWARD, LEFT);
-			setMotorDirection(BACKWARD, RIGHT);
-			setLeftMotorDutyCycle((uint16_t)(base_speed));
-			setRightMotorDutyCycle((uint16_t)(base_speed));
-//			osDelay(2000);
-			continue;
-		}
-
 		float error = red_ratio_R-red_ratio_L;
 		error_signal = error;
 
@@ -1434,7 +1389,6 @@ void wheelMotorTask(void *argument)
 			leftMotorDuty = base_speed;
 			rightMotorDuty = base_speed;
 		}
-
 
 		appliedLeftMotorDuty = leftMotorDuty;
 		appliedRightMotorDuty = rightMotorDuty;

@@ -1220,14 +1220,15 @@ void wheelMotorTask(void *argument)
 		if(((total_time-autonomy_start_time) > near_target_time) && (enable_autonomy && !is_rescue_complete))
 		{
 			near_target_milestone = true;
-			base_speed = 100;	// (200) 50 is lowest possible
+			base_speed = 100;
 			base_turn_speed = 60;
 		}
 
+		// slow down before reaching stop line
 		if((total_time-dropoff_complete_time > 19) && is_dropoff_complete)
 		{
 			near_start_line = true;
-			base_speed = 100;	// (200) 50 is lowest possible
+			base_speed = 100;
 			base_turn_speed = 60;
 		}
 

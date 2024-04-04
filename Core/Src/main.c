@@ -1241,7 +1241,7 @@ void wheelMotorTask(void *argument)
 				setRightMotorDutyCycle((uint16_t)(0));
 				setMotorDirection(FORWARD, LEFT);
 				setMotorDirection(FORWARD, RIGHT);
-				osDelay(300);
+				osDelay(100);
 
 				setLeftMotorDutyCycle((uint16_t)(base_speed));
 				setRightMotorDutyCycle((uint16_t)(base_speed));
@@ -1251,17 +1251,16 @@ void wheelMotorTask(void *argument)
 				setRightMotorDutyCycle((uint16_t)(0));
 				setMotorDirection(FORWARD, LEFT);
 				setMotorDirection(FORWARD, RIGHT);
-				osDelay(300);
 				htim1.Instance->CCR2 = open_pwm;
-				osDelay(300);
+				osDelay(100);
 
 				setMotorDirection(BACKWARD, LEFT);
 				setMotorDirection(BACKWARD, RIGHT);
 				setLeftMotorDutyCycle((uint16_t)(base_speed));
 				setRightMotorDutyCycle((uint16_t)(base_speed));
 				osDelay(600);
+
 				htim1.Instance->CCR2 = closed_pwm;
-				osDelay(100);
 				setMotorDirection(FORWARD, LEFT);
 				setMotorDirection(FORWARD, RIGHT);
 				is_dropoff_complete = true;
@@ -1279,14 +1278,14 @@ void wheelMotorTask(void *argument)
 			setMotorDirection(FORWARD, LEFT);
 			setMotorDirection(FORWARD, RIGHT);
 			htim1.Instance->CCR2 = open_pwm;
-			osDelay(500);
+			osDelay(100);
 
 			// Crawl forward
 			setMotorDirection(FORWARD, LEFT);
 			setMotorDirection(FORWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(base_crawl_speed));
 			setRightMotorDutyCycle((uint16_t)(base_crawl_speed));
-			osDelay(150);
+			osDelay(75);
 
 			// Stop to stabilize
 			setLeftMotorDutyCycle((uint16_t)(0));
@@ -1294,12 +1293,12 @@ void wheelMotorTask(void *argument)
 			setMotorDirection(FORWARD, LEFT);
 			setMotorDirection(FORWARD, RIGHT);
 			htim1.Instance->CCR2 = open_pwm;
-			osDelay(500);
+			osDelay(100);
 
 
 			// close grabber
 			htim1.Instance->CCR2 = closed_pwm;
-			osDelay(500);
+			osDelay(200);
 
 			// Crawl forward
 			setMotorDirection(FORWARD, LEFT);
@@ -1320,7 +1319,7 @@ void wheelMotorTask(void *argument)
 			setMotorDirection(FORWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(0));
 			setRightMotorDutyCycle((uint16_t)(0));
-			osDelay(500);
+			osDelay(100);
 
 			// Rescue routine complete
 			is_rescue_complete = true;

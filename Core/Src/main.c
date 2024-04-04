@@ -168,6 +168,7 @@ bool enable_pivot_test = false;
 bool is_rescue_complete = false;
 bool is_dropoff_complete = false;
 bool near_target_milestone = false;
+bool near_start_line = false;
 
 float control_signal = 0;
 float error_signal = 0;
@@ -206,6 +207,7 @@ float angle_z = 0;
 float total_time = 0;
 float autonomy_start_time = 0;
 float target_reached_time = 0;
+float dropoff_complete_time = 0;
 
 uint32_t sensorReadCycleTime = 0;
 uint32_t controlLoopCycleTime = 0;
@@ -1174,8 +1176,8 @@ void wheelMotorTask(void *argument)
 	float previous_error = 0;
 	float integral = 0;
 
-	const uint16_t open_pwm = 70;
-	const uint16_t closed_pwm = 105; //50 is lowest
+	const uint16_t open_pwm = 62;
+	const uint16_t closed_pwm = 115; //50 is lowest
 
 	uint16_t last_time = __HAL_TIM_GET_COUNTER(&htim11);
 	uint16_t current_time = __HAL_TIM_GET_COUNTER(&htim11);
@@ -1222,7 +1224,14 @@ void wheelMotorTask(void *argument)
 			base_turn_speed = 60;
 		}
 
+		if((total_time-dropoff_complete_time > 19) && is_dropoff_complete)
+		{
+			near_start_line = true;
+			base_speed = 100;	// (200) 50 is lowest possible
+			base_turn_speed = 60;
+		}
 
+		// drop off routine
 		if((green_data_C > 75 && green_data_R > 95) && (is_rescue_complete && enable_autonomy))
 		{
 			if(((total_time-target_reached_time) > 4) && !is_dropoff_complete)
@@ -1255,6 +1264,7 @@ void wheelMotorTask(void *argument)
 				setMotorDirection(FORWARD, LEFT);
 				setMotorDirection(FORWARD, RIGHT);
 				is_dropoff_complete = true;
+				dropoff_complete_time=total_time;
 			}
 		}
 
@@ -1295,7 +1305,7 @@ void wheelMotorTask(void *argument)
 			setMotorDirection(FORWARD, RIGHT);
 			setLeftMotorDutyCycle((uint16_t)(base_crawl_speed));
 			setRightMotorDutyCycle((uint16_t)(base_crawl_speed));
-			osDelay(500);
+			osDelay(600);
 
 			// Pivot turn right
 			setMotorDirection(FORWARD, LEFT);
@@ -1321,7 +1331,7 @@ void wheelMotorTask(void *argument)
 		// start line detection routine
 		if((blue_data_R < start_line_blue_side && blue_data_L < start_line_blue_side ) && (is_dropoff_complete && enable_autonomy))
 		{
-			if(blue_data_C > start_line_blue_center)
+			if(blue_data_C > start_line_blue_center && near_start_line)
 			{
 				// Stop to stabilize
 				setLeftMotorDutyCycle((uint16_t)(0));

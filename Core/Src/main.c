@@ -1155,16 +1155,16 @@ void colourSensorReadTsk(void *argument)
 void wheelMotorTask(void *argument)
 {
   /* USER CODE BEGIN wheelMotorTask */
-	uint16_t base_speed = 180;	// (200) 50 is lowest possible
-	uint16_t base_turn_speed = 80;
+	uint16_t base_speed = 200;	// (200) 50 is lowest possible
+	uint16_t base_turn_speed = 200;
 	uint16_t base_crawl_speed = 80;
 	uint16_t base_pivot_speed = 80;
-	float turn_compensation_factor = 0.95;
+	float turn_compensation_factor = 1;
 
 	const uint16_t target_max_blue = 150; //125
 	const uint16_t start_line_blue_side = 65;
 	const uint16_t start_line_blue_center = 65;
-	const float near_target_time = 26;
+	const float near_target_time = 24;
 
 	const float Kp = 1.5; //4, 6, 10 30
 	const float Ki = 0; //0
@@ -1232,7 +1232,7 @@ void wheelMotorTask(void *argument)
 				setMotorDirection(FORWARD, RIGHT);
 				osDelay(100);
 
-				setLeftMotorDutyCycle((uint16_t)(base_speed));
+				setLeftMotorDutyCycle((uint16_t)(base_speed + 10));
 				setRightMotorDutyCycle((uint16_t)(base_speed));
 				osDelay(100);
 

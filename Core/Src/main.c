@@ -1231,7 +1231,7 @@ void wheelMotorTask(void *argument)
 				setRightMotorDutyCycle((uint16_t)(0));
 				setMotorDirection(FORWARD, LEFT);
 				setMotorDirection(FORWARD, RIGHT);
-				osDelay(500);
+				osDelay(300);
 
 				setLeftMotorDutyCycle((uint16_t)(base_speed));
 				setRightMotorDutyCycle((uint16_t)(base_speed));
@@ -1241,9 +1241,9 @@ void wheelMotorTask(void *argument)
 				setRightMotorDutyCycle((uint16_t)(0));
 				setMotorDirection(FORWARD, LEFT);
 				setMotorDirection(FORWARD, RIGHT);
-				osDelay(500);
+				osDelay(300);
 				htim1.Instance->CCR2 = open_pwm;
-				osDelay(500);
+				osDelay(300);
 
 				setMotorDirection(BACKWARD, LEFT);
 				setMotorDirection(BACKWARD, RIGHT);
@@ -1319,7 +1319,7 @@ void wheelMotorTask(void *argument)
 		}
 
 		// start line detection routine
-		if((blue_data_R < start_line_blue_side && blue_data_L < start_line_blue_side ) && (is_rescue_complete && enable_autonomy))
+		if((blue_data_R < start_line_blue_side && blue_data_L < start_line_blue_side ) && (is_dropoff_complete && enable_autonomy))
 		{
 			if(blue_data_C > start_line_blue_center)
 			{
